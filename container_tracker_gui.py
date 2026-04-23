@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Container ETA Tracker — Ken Gabbay Coffee
+Container Tracker
 """
 
-import json, os, sys, threading, logging, base64, io
+__version__ = "1.0.0"
+
+import json, os, sys, threading, logging, webbrowser, shutil, re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -34,18 +36,182 @@ try:
 except ImportError:
     HAS_OPENPYXL = False
 
-LOGO_B64 = "/9j/4AAQSkZJRgABAQAASABIAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIbGNtcwIQAABtbnRyUkdCIFhZWiAH4gADABQACQAOAB1hY3NwTVNGVAAAAABzYXdzY3RybAAAAAAAAAAAAAAAAAAA9tYAAQAAAADTLWhhbmSdkQA9QICwPUB0LIGepSKOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAAF9jcHJ0AAABDAAAAAx3dHB0AAABGAAAABRyWFlaAAABLAAAABRnWFlaAAABQAAAABRiWFlaAAABVAAAABRyVFJDAAABaAAAAGBnVFJDAAABaAAAAGBiVFJDAAABaAAAAGBkZXNjAAAAAAAAAAV1UkdCAAAAAAAAAAAAAAAAdGV4dAAAAABDQzAAWFlaIAAAAAAAAPNUAAEAAAABFslYWVogAAAAAAAAb6AAADjyAAADj1hZWiAAAAAAAABilgAAt4kAABjaWFlaIAAAAAAAACSgAAAPhQAAtsRjdXJ2AAAAAAAAACoAAAB8APgBnAJ1A4MEyQZOCBIKGAxiDvQRzxT2GGocLiBDJKwpai5+M+s5sz/WRldNNlR2XBdkHWyGdVZ+jYgskjacq6eMstu+mcrH12Xkd/H5////2wBDAAcHBwcHBwwHBwwRDAwMERcRERERFx4XFxcXFx4kHh4eHh4eJCQkJCQkJCQrKysrKysyMjIyMjg4ODg4ODg4ODj/2wBDAQkJCQ4NDhkNDRk7KCEoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAH0AfQDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD6RooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKqS3tnbcXE8cf++wH8zQBborFbxF4fj4fUbUfWZB/WmDxN4cJwNTtP8Av+n+NAG7RWXHrOjzcQ3sD/7sqn+RrQR0kXchDA9wcigCSiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAK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G5it165ldV/maAPMvAvgDV/DOqzavqF4krzoVdVBJbJySWOOcgGvXa801P4r+DtOBEVw924/hgQn/wAebC/ka4qT4o+K9fc2/hHSG5O3zWDSke/ACr+JIoA96lkjhjMsrBFUZLMcAD3NeaeIPiv4Z0cNFZOdQnHAWH7gPvJ0x9M1x8fw78ceKHE3jLUzHFnPkht5H0RcRr9RmvSNA+Hvhfw8VltLbzp16TTne+fUdlP0AoA8uP8Awsr4i/KR/Zemv1+8isv/AKG/6L9K9G8L/Dbw94aKXOz7Xdrz50oBwfVF6L9eT716JRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABWPqeh6Pq67NUtIrjjAMiAsPoeo/CtiigDyfUfg94RvMtarNaE9BE+Vz9HDfzFc23wh1zTSX8P648R6gEPFj/gSMf5V75RQB4F/Yfxn0zi11BLoD/por5/7+qKX+1/jVZ8TWKTY77Yzn/vhq98ooA8E/4TX4tR8PoSN7iCU/yek/4Tr4qnhdAXPvbzf/F175RQB4H/AMJT8YLniLSEj/7ZMP8A0J6P+L4XxxhbVT3/AHA/xavfKKAPAf8AhAviXqn/ACFdc8tG6qssh/8AHVAX9au2XwR0wN5mq6hPcMeT5arHk+5O417jRQBw+m/DrwfpOGg0+OVx/FNmU59cNkD8BXaRxpGgjjAVQMADgAfSpKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//9k="
+try:
+    import keyring
+except ImportError:
+    keyring = None
+
+
+APP_NAME = "Container Tracker"
+APP_SHORT_NAME = "ContainerTracker"
+GITHUB_REPO = "m-mcohen/container-tracker"
+ACCENT = "#2563eb"
 
 API_BASE = "https://api.shipsgo.com/v2"
-APP_DIR = Path(os.path.dirname(os.path.abspath(sys.argv[0])))
-CONFIG_FILE = APP_DIR / "config.json"
-TRACKING_DB_FILE = APP_DIR / "tracking_data.json"
-LOG_FILE = APP_DIR / "tracker.log"
+KEYRING_SERVICE = f"{APP_SHORT_NAME}_shipsgo_api"
+LEGACY_KEYRING_SERVICE = "KenGabbayTracker_shipsgo_api"
+KEYRING_USER = "default"
+
+
+def resource_path(rel: str) -> Path:
+    base = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
+    return Path(base) / rel
+
+
+LOGO_PATH = resource_path("app.ico")  # window icon only; not rendered in-app
+
+
+def get_data_dir() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    else:
+        base = Path.home() / ".config"
+    d = base / APP_SHORT_NAME
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+DATA_DIR = get_data_dir()
+CONFIG_FILE = DATA_DIR / "config.json"
+TRACKING_DB_FILE = DATA_DIR / "tracking_data.json"
+LOG_FILE = DATA_DIR / "tracker.log"
+
+
+def _migrate_data_folder(src: Path, dst: Path) -> int:
+    """Move known data files from src → dst. Returns number of files moved. Removes src only if it emptied out."""
+    if src is None or not src.exists() or src.resolve() == dst.resolve():
+        return 0
+    moved = 0
+    for name in ("config.json", "tracking_data.json", "tracker.log"):
+        s = src / name
+        d = dst / name
+        if s.exists() and not d.exists():
+            try:
+                shutil.move(str(s), str(d))
+                moved += 1
+            except Exception:
+                pass
+    if moved > 0:
+        try:
+            remaining = list(src.iterdir())
+            if not remaining:
+                src.rmdir()
+                # Try to clean up KGC's company-level parent if it becomes empty.
+                try:
+                    parent = src.parent
+                    appdata = Path(os.environ.get("APPDATA", "")) if sys.platform == "win32" else None
+                    if parent.exists() and parent != appdata and not list(parent.iterdir()):
+                        parent.rmdir()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    return moved
+
+
+# Migration chain: (i) next-to-exe/.py (oldest layout) and (ii) KGC-named APPDATA folder → DATA_DIR
+_LEGACY_EXE_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(os.path.dirname(os.path.abspath(__file__)))
+_LEGACY_KGC_DIR = None
+if sys.platform == "win32":
+    _LEGACY_KGC_DIR = Path(os.environ.get("APPDATA", Path.home())) / "Ken Gabbay Coffee" / "KenGabbayTracker"
+
+_migrate_data_folder(_LEGACY_EXE_DIR, DATA_DIR)
+_migrate_data_folder(_LEGACY_KGC_DIR, DATA_DIR)
+
 EST = timezone(timedelta(hours=-5))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                     handlers=[logging.FileHandler(LOG_FILE)])
 logger = logging.getLogger(__name__)
+
+
+def get_api_token() -> str:
+    if keyring is None:
+        return ""
+    try:
+        return keyring.get_password(KEYRING_SERVICE, KEYRING_USER) or ""
+    except Exception as e:
+        logger.info(f"keyring read failed: {e}")
+        return ""
+
+
+def set_api_token(token: str):
+    if keyring is None:
+        logger.info("keyring not installed; token not persisted")
+        return
+    try:
+        keyring.set_password(KEYRING_SERVICE, KEYRING_USER, token)
+    except Exception as e:
+        logger.info(f"keyring write failed: {e}")
+
+
+def _migrate_keyring():
+    if keyring is None:
+        return
+    try:
+        old = keyring.get_password(LEGACY_KEYRING_SERVICE, KEYRING_USER)
+    except Exception as e:
+        logger.info(f"keyring legacy read failed: {e}")
+        return
+    if not old:
+        return
+    try:
+        current = keyring.get_password(KEYRING_SERVICE, KEYRING_USER)
+    except Exception:
+        current = None
+    if not current:
+        try:
+            keyring.set_password(KEYRING_SERVICE, KEYRING_USER, old)
+            logger.info("migrated keyring entry to new service name")
+        except Exception as e:
+            logger.info(f"keyring migrate write failed: {e}")
+            return
+    try:
+        keyring.delete_password(LEGACY_KEYRING_SERVICE, KEYRING_USER)
+    except Exception as e:
+        logger.info(f"keyring legacy delete failed: {e}")
+
+
+_migrate_keyring()
+
+
+def check_for_update_async(on_update):
+    """Background GitHub Releases check. Calls on_update(tag, html_url) if a newer version is available."""
+    def _go():
+        try:
+            if "<<" in GITHUB_REPO or "/" not in GITHUB_REPO:
+                return
+            r = requests.get(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest", timeout=5)
+            if r.status_code != 200:
+                logger.info(f"update check: HTTP {r.status_code}")
+                return
+            data = r.json()
+            tag = str(data.get("tag_name", "")).lstrip("v").strip()
+            url = data.get("html_url", "")
+            if not tag:
+                return
+            from packaging.version import parse as _parse
+            if _parse(tag) > _parse(__version__):
+                on_update(tag, url)
+        except Exception as e:
+            logger.info(f"update check failed: {e}")
+    threading.Thread(target=_go, daemon=True).start()
+
+
+API_KEY_PATTERN = re.compile(r"^[0-9a-fA-F\-]{30,40}$")
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def open_in_explorer(path: Path):
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(path))
+        elif sys.platform == "darwin":
+            import subprocess; subprocess.Popen(["open", str(path)])
+        else:
+            import subprocess; subprocess.Popen(["xdg-open", str(path)])
+    except Exception as e:
+        logger.info(f"open_in_explorer failed: {e}")
 
 def now_est():
     return datetime.now(EST).strftime("%Y-%m-%d %I:%M %p EST")
@@ -57,19 +223,19 @@ LIGHT = {
     "bg": "#ECEAE5", "card": "#FFFFFF", "input": "#F7F6F3",
     "primary": "#111111", "secondary": "#333333", "muted": "#666666",
     "hint": "#999999", "border": "#D0CEC8",
-    "green": "#3EA652", "green_dark": "#2D8A42", "green_light": "#E0F2E5",
+    "green": ACCENT, "green_dark": "#1D4ED8", "green_light": "#DBEAFE",
     "blue": "#1565C0", "blue_light": "#E3F2FD",
     "btn_bg": "#DDDBD5", "btn_text": "#333333",
     "thead": "#F2F0EC", "log_bg": "#FFFFFF",
     "sail_bg": "#E3F2FD", "sail_fg": "#0D47A1",
-    "disc_bg": "#E0F2E5", "disc_fg": "#1B5E20",
+    "disc_bg": "#DBEAFE", "disc_fg": "#1E40AF",
     "stat_bg": "#FFFFFF",
 }
 DARK = {
     "bg": "#1A1A1F", "card": "#242429", "input": "#1E1E24",
     "primary": "#F0EDE8", "secondary": "#CCCCCC", "muted": "#909090",
     "hint": "#606060", "border": "#3A3A42",
-    "green": "#3EA652", "green_dark": "#2D8A42", "green_light": "#1A3A24",
+    "green": ACCENT, "green_dark": "#1D4ED8", "green_light": "#1E2A44",
     "blue": "#64B5F6", "blue_light": "#1A2A3A",
     "btn_bg": "#333338", "btn_text": "#CCCCCC",
     "thead": "#1E1E24", "log_bg": "#1E1E24",
@@ -100,9 +266,216 @@ def load_json(fp, default=None):
 def save_json(fp, data):
     with open(fp,"w") as f: json.dump(data,f,indent=2,default=str)
 def load_config():
-    return load_json(CONFIG_FILE, {"api_key":"","excel_path":"","dark_mode":False,"dismissed":[]})
+    return load_json(CONFIG_FILE, {"company_name":"","contact_email":"","excel_path":"","dark_mode":False,"dismissed":[]})
 def save_config(c):
     save_json(CONFIG_FILE,c)
+
+def migrate_token_from_config(cfg: dict) -> bool:
+    """If config.json contains a legacy token field, move it to keyring. Returns True if migrated."""
+    changed = False
+    for key in ("shipsgo_api_token", "api_key"):
+        if key in cfg:
+            tok = str(cfg.pop(key) or "").strip()
+            if tok:
+                set_api_token(tok)
+                logger.info(f"migrated {key} from config.json to keyring")
+            changed = True
+    return changed
+
+
+def is_first_run(cfg: dict) -> bool:
+    return not cfg.get("company_name") and not get_api_token()
+
+
+def validate_setup_fields(company: str, api_key: str, email: str) -> str | None:
+    if not company.strip():
+        return "Company name is required."
+    if not api_key.strip():
+        return "ShipsGo API key is required."
+    if not API_KEY_PATTERN.match(api_key.strip()):
+        return "That API key doesn't look right — check for extra spaces or missing characters."
+    if not email.strip() or not EMAIL_PATTERN.match(email.strip()):
+        return "Enter a valid email address."
+    return None
+
+
+class SetupDialog:
+    """Modal first-run / settings editor for company_name + api_key + contact_email."""
+    def __init__(self, parent, initial_company="", initial_api_key="", initial_email="",
+                 mode="first_run", extra_info=None):
+        """
+        mode: 'first_run' (blocking, no cancel, × quits app) or 'settings' (has Save + Cancel).
+        extra_info: optional dict with keys version, data_dir (Path), github_repo — shown read-only in settings.
+        """
+        self.mode = mode
+        self.result = None  # dict or None on cancel
+        self.parent = parent
+        self._build(initial_company, initial_api_key, initial_email, extra_info or {})
+
+    def _build(self, company, api_key, email, extra):
+        title = "Welcome to Container Tracker" if self.mode == "first_run" else "Settings"
+        if HAS_CTK:
+            self.win = ctk.CTkToplevel(self.parent)
+        else:
+            self.win = tk.Toplevel(self.parent)
+        self.win.title(title)
+        self.win.resizable(False, False)
+        self.win.transient(self.parent)
+        try:
+            self.win.iconbitmap(str(LOGO_PATH))
+        except Exception:
+            pass
+
+        # × handler
+        if self.mode == "first_run":
+            self.win.protocol("WM_DELETE_WINDOW", self._exit_app)
+        else:
+            self.win.protocol("WM_DELETE_WINDOW", self._on_cancel)
+
+        body = ctk.CTkFrame(self.win, fg_color="transparent") if HAS_CTK else tk.Frame(self.win)
+        body.pack(padx=24, pady=20, fill="both", expand=True)
+
+        if self.mode == "first_run":
+            intro = "Let's get you set up. You can change these later in Settings."
+        else:
+            intro = "Update your company info and API credentials."
+        (ctk.CTkLabel(body, text=intro, font=("Segoe UI", 12), justify="left") if HAS_CTK
+         else tk.Label(body, text=intro, font=("Segoe UI", 10), justify="left")).pack(anchor="w", pady=(0, 14))
+
+        self.company_var = StringVar(value=company)
+        self.api_var = StringVar(value=api_key)
+        self.email_var = StringVar(value=email)
+
+        self._field(body, "Company name", self.company_var, width=360)
+        self._field(body, "ShipsGo API key", self.api_var, width=360, mono=True,
+                    hint="Find your key at shipsgo.com \u2192 Dashboard \u2192 Integrations \u2192 ShipsGo API")
+        self._field(body, "Contact email", self.email_var, width=360)
+
+        for v in (self.company_var, self.api_var, self.email_var):
+            v.trace_add("write", lambda *_: self._update_save_state())
+
+        if extra:
+            sep = (ctk.CTkFrame(body, height=1, fg_color="#CCCCCC") if HAS_CTK
+                   else tk.Frame(body, height=1, bg="#CCCCCC"))
+            sep.pack(fill="x", pady=(12, 10))
+            self._info_row(body, "App version", extra.get("version", ""))
+            dd = extra.get("data_dir")
+            if dd:
+                self._info_row(body, "Data folder", str(dd), clickable=lambda: open_in_explorer(dd))
+            self._info_row(body, "GitHub repo", extra.get("github_repo", ""))
+
+        # Error label
+        self.err_var = StringVar(value="")
+        err = (ctk.CTkLabel(body, textvariable=self.err_var, text_color="#D32F2F",
+                            font=("Segoe UI", 11), justify="left") if HAS_CTK
+               else tk.Label(body, textvariable=self.err_var, fg="#D32F2F", font=("Segoe UI", 9), justify="left"))
+        err.pack(anchor="w", pady=(6, 0))
+
+        # Buttons
+        btns = ctk.CTkFrame(body, fg_color="transparent") if HAS_CTK else tk.Frame(body)
+        btns.pack(fill="x", pady=(14, 0))
+
+        if self.mode == "settings":
+            if HAS_CTK:
+                self.cancel_btn = ctk.CTkButton(btns, text="Cancel", width=100, command=self._on_cancel,
+                                                fg_color="#DDDBD5", text_color="#333333", hover_color="#C7C4BD")
+            else:
+                self.cancel_btn = tk.Button(btns, text="Cancel", width=12, command=self._on_cancel)
+            self.cancel_btn.pack(side="right", padx=(8, 0))
+
+        if HAS_CTK:
+            self.save_btn = ctk.CTkButton(btns, text="Save", width=120, command=self._on_save,
+                                          fg_color=ACCENT, hover_color="#1D4ED8", text_color="white",
+                                          font=("Segoe UI", 12, "bold"))
+        else:
+            self.save_btn = tk.Button(btns, text="Save", width=14, command=self._on_save,
+                                      bg=ACCENT, fg="white")
+        self.save_btn.pack(side="right")
+
+        self._update_save_state()
+        self.win.update_idletasks()
+        self._center()
+        self.win.grab_set()
+        self.win.focus_force()
+
+    def _field(self, parent, label, var, width=340, mono=False, hint=None):
+        (ctk.CTkLabel(parent, text=label, font=("Segoe UI", 12, "bold"), anchor="w") if HAS_CTK
+         else tk.Label(parent, text=label, font=("Segoe UI", 10, "bold"), anchor="w")).pack(anchor="w", pady=(4, 2))
+        font = ("Consolas", 12) if mono else ("Segoe UI", 12)
+        if HAS_CTK:
+            entry = ctk.CTkEntry(parent, textvariable=var, width=width, font=font, corner_radius=8)
+        else:
+            entry = tk.Entry(parent, textvariable=var, width=width // 8, font=font)
+        entry.pack(anchor="w", pady=(0, 2))
+        if hint:
+            (ctk.CTkLabel(parent, text=hint, font=("Segoe UI", 10), text_color="#666666", anchor="w") if HAS_CTK
+             else tk.Label(parent, text=hint, font=("Segoe UI", 9), fg="#666666", anchor="w")).pack(anchor="w", pady=(0, 8))
+        else:
+            (ctk.CTkFrame(parent, height=4, fg_color="transparent") if HAS_CTK
+             else tk.Frame(parent, height=4)).pack(pady=(0, 4))
+
+    def _info_row(self, parent, label, value, clickable=None):
+        row = ctk.CTkFrame(parent, fg_color="transparent") if HAS_CTK else tk.Frame(parent)
+        row.pack(anchor="w", fill="x", pady=1)
+        (ctk.CTkLabel(row, text=label + ":", font=("Segoe UI", 10, "bold"), width=110, anchor="w") if HAS_CTK
+         else tk.Label(row, text=label + ":", font=("Segoe UI", 9, "bold"), width=14, anchor="w")).pack(side="left")
+        text_color = ACCENT if clickable else "#333333"
+        cursor = "hand2" if clickable else ""
+        if HAS_CTK:
+            lbl = ctk.CTkLabel(row, text=value, font=("Segoe UI", 10), text_color=text_color,
+                               cursor=cursor, anchor="w")
+        else:
+            lbl = tk.Label(row, text=value, font=("Segoe UI", 9), fg=text_color, cursor=cursor, anchor="w")
+        lbl.pack(side="left")
+        if clickable:
+            lbl.bind("<Button-1>", lambda _e: clickable())
+
+    def _center(self):
+        self.win.update_idletasks()
+        w = self.win.winfo_width(); h = self.win.winfo_height()
+        sw = self.win.winfo_screenwidth(); sh = self.win.winfo_screenheight()
+        x = (sw - w) // 2; y = (sh - h) // 3
+        self.win.geometry(f"+{x}+{y}")
+
+    def _update_save_state(self):
+        valid = (self.company_var.get().strip() and self.api_var.get().strip() and self.email_var.get().strip()
+                 and API_KEY_PATTERN.match(self.api_var.get().strip())
+                 and EMAIL_PATTERN.match(self.email_var.get().strip()))
+        state = "normal" if valid else "disabled"
+        try:
+            if HAS_CTK:
+                self.save_btn.configure(state=state)
+            else:
+                self.save_btn.config(state=state)
+        except Exception:
+            pass
+
+    def _on_save(self):
+        err = validate_setup_fields(self.company_var.get(), self.api_var.get(), self.email_var.get())
+        if err:
+            self.err_var.set(err); return
+        self.result = {
+            "company_name": self.company_var.get().strip(),
+            "api_key": self.api_var.get().strip(),
+            "contact_email": self.email_var.get().strip(),
+        }
+        self.win.grab_release(); self.win.destroy()
+
+    def _on_cancel(self):
+        self.result = None
+        self.win.grab_release(); self.win.destroy()
+
+    def _exit_app(self):
+        # First-run × quits app cleanly.
+        try:
+            self.win.grab_release(); self.win.destroy()
+        except Exception:
+            pass
+        try:
+            self.parent.destroy()
+        except Exception:
+            pass
+        sys.exit(0)
 
 class ShipsGoClient:
     def __init__(self, token):
@@ -288,44 +661,117 @@ def create_template_excel(path):
     ws.freeze_panes="A2"; wb.save(str(path)); wb.close(); return str(path)
 
 
-class ContainerTrackerApp:
+_BaseRoot = ctk.CTk if HAS_CTK else tk.Tk
+
+
+class ContainerTrackerApp(_BaseRoot):
     def __init__(self):
+        if HAS_CTK:
+            ctk.set_appearance_mode("light")
+        super().__init__()
+
+        self.wm_attributes('-alpha', 0.0)
+
+        self.update_idletasks()
+
+        self.root = self  # alias so the rest of the class can keep using self.root.*
+
         self.config=load_config()
+        if migrate_token_from_config(self.config):
+            save_config(self.config)
         self.is_dark=self.config.get("dark_mode",False)
         self.T=DARK if self.is_dark else LIGHT
         self.db=load_json(TRACKING_DB_FILE,{})
         self.client=None; self.themed_widgets=[]
+        self.update_banner=None
 
         if HAS_CTK:
-            ctk.set_appearance_mode("light")
-            self.root=ctk.CTk(); self.root.configure(fg_color=self.T["bg"])
+            self.configure(fg_color=self.T["bg"])
         else:
-            self.root=tk.Tk(); self.root.configure(bg=self.T["bg"])
-        self.root.title("Container Tracking \u2014 Ken Gabbay Coffee")
-        self.root.geometry("1020x800"); self.root.minsize(860,650)
+            self.configure(bg=self.T["bg"])
+        self.title(APP_NAME)
 
-        # Set window icon from embedded logo
-        self.logo_image=None; self.logo_icon=None
-        if HAS_PIL:
-            try:
-                d=base64.b64decode(LOGO_B64)
-                img=Image.open(io.BytesIO(d))
-                self.logo_image=ctk.CTkImage(img.resize((50,50),Image.LANCZOS),size=(50,50)) if HAS_CTK else ImageTk.PhotoImage(img.resize((50,50),Image.LANCZOS))
-                # Save as temp .ico and set as window icon
-                import tempfile
-                self._icon_path=os.path.join(tempfile.gettempdir(),"kgc_tracker.ico")
-                icon_sizes=[(16,16),(32,32),(48,48)]
-                icon_imgs=[img.resize(s,Image.LANCZOS) for s in icon_sizes]
-                icon_imgs[0].save(self._icon_path,format="ICO",sizes=icon_sizes,append_images=icon_imgs[1:])
-                def _set_icon():
-                    try: self.root.iconbitmap(self._icon_path)
-                    except: pass
-                self.root.after(200, _set_icon)
-                self.root.after(600, _set_icon)
-                self.root.after(1200, _set_icon)
-            except Exception: pass
+        # Geometry is deferred to the reveal block below — calling self.geometry() on a
+        # CTk root in 'withdrawn' state (CTk's default) is a silent no-op. minsize is fine
+        # to set here; it just constrains future resize operations.
+        self.minsize(860,650)
 
+        if LOGO_PATH.exists() and LOGO_PATH.suffix.lower() == ".ico":
+            def _set_icon():
+                try: self.iconbitmap(str(LOGO_PATH))
+                except Exception: pass
+            self.after(200, _set_icon)
+            self.after(600, _set_icon)
+            self.after(1200, _set_icon)
+
+        first_run = is_first_run(self.config)
+        if first_run:
+            dlg = SetupDialog(self, mode="first_run")
+            self.wait_window(dlg.win)
+            if not dlg.result:
+                self.destroy()
+                sys.exit(0)
+            self.config["company_name"] = dlg.result["company_name"]
+            self.config["contact_email"] = dlg.result["contact_email"]
+            save_config(self.config)
+            set_api_token(dlg.result["api_key"])
+            self.api_key_cached = dlg.result["api_key"]
+        else:
+            self.api_key_cached = get_api_token()
+
+        self._apply_window_title()
         self.build_ui(); self.load_table_data(); self.update_stats()
+
+        # Reveal. Order matters: deiconify flips WM state 'withdrawn' → 'normal', so
+        # geometry/alpha calls that follow actually take effect against a mapped window.
+        self.deiconify()
+
+        self.geometry("1020x800")
+
+        self.wm_attributes('-alpha', 1.0)
+
+        self.lift()
+        self.update_idletasks()
+
+        check_for_update_async(lambda tag, url: self.after(0, lambda: self.show_update_banner(tag, url)))
+
+    def _apply_window_title(self):
+        company = self.config.get("company_name", "").strip()
+        self.root.title(f"{APP_NAME} \u2014 {company}" if company else APP_NAME)
+
+    def show_update_banner(self, new_version: str, release_url: str):
+        if self.update_banner is not None:
+            return
+        T=self.T
+        if HAS_CTK:
+            bar=ctk.CTkFrame(self.root, fg_color=T["sail_bg"], corner_radius=0, height=34)
+            bar.pack(fill="x", side="top", before=self.root.winfo_children()[0])
+            msg=ctk.CTkLabel(bar, text=f"Version {new_version} available \u2014 click to download",
+                             text_color=T["sail_fg"], font=("Segoe UI",12,"bold"), cursor="hand2",
+                             fg_color="transparent")
+            msg.pack(side="left", padx=12, pady=4)
+            close=ctk.CTkButton(bar, text="\u00d7", width=28, height=24, corner_radius=6,
+                                fg_color="transparent", hover_color=T["border"],
+                                text_color=T["sail_fg"], font=("Segoe UI",14,"bold"),
+                                command=self._dismiss_update_banner)
+            close.pack(side="right", padx=6, pady=4)
+        else:
+            bar=tk.Frame(self.root, bg=T["sail_bg"])
+            bar.pack(fill="x", side="top", before=self.root.winfo_children()[0])
+            msg=tk.Label(bar, text=f"Version {new_version} available \u2014 click to download",
+                         bg=T["sail_bg"], fg=T["sail_fg"], font=("Segoe UI",10,"bold"), cursor="hand2")
+            msg.pack(side="left", padx=12, pady=4)
+            close=tk.Button(bar, text="\u00d7", bg=T["sail_bg"], fg=T["sail_fg"],
+                            relief="flat", command=self._dismiss_update_banner)
+            close.pack(side="right", padx=6, pady=2)
+        msg.bind("<Button-1>", lambda _e: webbrowser.open(release_url))
+        self.update_banner=bar
+
+    def _dismiss_update_banner(self):
+        if self.update_banner is not None:
+            try: self.update_banner.destroy()
+            except Exception: pass
+            self.update_banner=None
 
     def _reg(self,w,role):
         self.themed_widgets.append((w,role)); return w
@@ -402,12 +848,11 @@ class ContainerTrackerApp:
         # Header
         hdr=self._f(self.root); hdr.pack(fill="x",padx=20,pady=(14,6))
         left=self._f(hdr); left.pack(side="left")
-        if self.logo_image:
-            (ctk.CTkLabel(left,image=self.logo_image,text="",fg_color="transparent") if HAS_CTK
-             else tk.Label(left,image=self.logo_image,bg=T["bg"])).pack(side="left",padx=(0,14))
         tf=self._f(left); tf.pack(side="left")
-        self._l(tf,"Container Tracking",size=18,bold=True).pack(anchor="w")
-        self._l(tf,"Ken Gabbay Coffee",role="label_muted",size=11).pack(anchor="w")
+        self._l(tf,APP_NAME,size=18,bold=True).pack(anchor="w")
+        company=self.config.get("company_name","").strip()
+        self.company_label=self._l(tf, company, role="label_muted", size=11)
+        self.company_label.pack(anchor="w")
         rt=self._f(hdr); rt.pack(side="right")
         self.status_label=self._l(rt,"",role="label_green",size=11)
         self.status_label.pack(side="left",padx=(0,14))
@@ -416,13 +861,14 @@ class ContainerTrackerApp:
                 fg_color=T["border"],progress_color=T["green"],button_color="#FFF",button_hover_color="#EEE")
             if self.is_dark: self.theme_switch.select()
             self.theme_switch.pack(side="left")
-
-        # API Key
-        kf=self._f(self.root); kf.pack(fill="x",padx=20,pady=(2,4))
-        self._l(kf,"API key",role="label_muted",size=11).pack(side="left",padx=(0,8))
-        self.api_key_var=StringVar(value=self.config.get("api_key",""))
-        self._e(kf,textvariable=self.api_key_var,show="*",width=340).pack(side="left",padx=(0,6))
-        self._btn(kf,"Save",self.save_api_key).pack(side="left")
+            self.settings_btn=ctk.CTkButton(rt, text="\u2699", width=32, height=32, corner_radius=8,
+                fg_color="transparent", hover_color=T["border"], text_color=T["secondary"],
+                font=("Segoe UI", 18), command=self.open_settings)
+            self.settings_btn.pack(side="left", padx=(10, 0))
+        else:
+            self.settings_btn=tk.Button(rt, text="\u2699", command=self.open_settings,
+                font=("Segoe UI", 14), relief="flat", bg=T["bg"], fg=T["secondary"])
+            self.settings_btn.pack(side="left", padx=(10, 0))
 
         # Excel card
         ec=self._card(self.root); ec.pack(fill="x",padx=20,pady=(4,4))
@@ -547,15 +993,36 @@ class ContainerTrackerApp:
                 rec.get("delay_days",""), route, rec.get("vessel",""), tp))
         self.update_stats()
 
-    def save_api_key(self):
-        key=self.api_key_var.get().strip()
-        if not key: messagebox.showwarning("Missing Key","Please enter your ShipsGo API key."); return
-        self.config["api_key"]=key; save_config(self.config); self.client=None
-        self.log("API key saved."); messagebox.showinfo("Saved","API key saved.")
+    def open_settings(self):
+        extra = {"version": __version__, "data_dir": DATA_DIR, "github_repo": GITHUB_REPO}
+        dlg = SetupDialog(self.root,
+                          initial_company=self.config.get("company_name",""),
+                          initial_api_key=self.api_key_cached or get_api_token(),
+                          initial_email=self.config.get("contact_email",""),
+                          mode="settings",
+                          extra_info=extra)
+        self.root.wait_window(dlg.win)
+        if not dlg.result:
+            return
+        self.config["company_name"] = dlg.result["company_name"]
+        self.config["contact_email"] = dlg.result["contact_email"]
+        save_config(self.config)
+        if dlg.result["api_key"] != self.api_key_cached:
+            set_api_token(dlg.result["api_key"])
+            self.api_key_cached = dlg.result["api_key"]
+            self.client = None  # force rebuild with new token
+        self._apply_window_title()
+        company = self.config.get("company_name", "").strip()
+        try:
+            if HAS_CTK: self.company_label.configure(text=company)
+            else: self.company_label.config(text=company)
+        except Exception: pass
+        self.log("Settings updated.")
+
     def get_client(self):
-        key=self.api_key_var.get().strip()
+        key=(self.api_key_cached or get_api_token()).strip()
         if not key:
-            messagebox.showwarning("Missing API Key","Enter your ShipsGo API key first.\n\n1. Go to shipsgo.com\n2. Dashboard > Integrations > ShipsGo API\n3. Copy your token"); return None
+            messagebox.showwarning("Missing API Key","Open Settings (\u2699) and enter your ShipsGo API key.\n\n1. Go to shipsgo.com\n2. Dashboard > Integrations > ShipsGo API\n3. Copy your token"); return None
         if self.client is None: self.client=ShipsGoClient(key)
         return self.client
 

@@ -1,49 +1,34 @@
 @echo off
-REM ============================================================
-REM  Build Container Tracker into a standalone Windows .exe
-REM ============================================================
+setlocal
 
 echo ============================================
-echo  Building Container ETA Tracker .exe
+echo  Building Container Tracker
 echo ============================================
-echo.
 
 echo [1/3] Installing dependencies...
-pip install requests openpyxl customtkinter pillow pyinstaller --quiet
-if %errorlevel% neq 0 (
-    echo ERROR: Failed to install packages.
-    pause
-    exit /b 1
-)
+pip install requests openpyxl customtkinter pillow pyinstaller keyring packaging --quiet
+if %errorlevel% neq 0 ( echo ERROR: pip install failed. & exit /b 1 )
 
-echo [2/3] Compiling application...
+echo [2/3] Compiling ContainerTracker.exe...
 pyinstaller ^
     --noconfirm ^
     --onefile ^
     --windowed ^
     --name "ContainerTracker" ^
-    --icon "crate.ico" ^
+    --icon app.ico ^
+    --add-data "app.ico;." ^
     --collect-all customtkinter ^
+    --collect-all keyring ^
+    --distpath "dist" ^
     container_tracker_gui.py
 
-if %errorlevel% neq 0 (
-    echo ERROR: Build failed.
-    pause
-    exit /b 1
-)
+if %errorlevel% neq 0 ( echo ERROR: PyInstaller build failed. & exit /b 1 )
 
-echo [3/3] Preparing delivery package...
-if not exist "delivery" mkdir delivery
-copy dist\ContainerTracker.exe delivery\
-copy README_CLIENT.md delivery\
-
+echo [3/3] Done.
 echo.
 echo ============================================
-echo  BUILD COMPLETE!
+echo  BUILD COMPLETE
 echo ============================================
+echo   Output: dist\ContainerTracker.exe
 echo.
-echo  Delivery package is in the "delivery" folder:
-echo    delivery\ContainerTracker.exe
-echo    delivery\README_CLIENT.md
-echo.
-pause
+exit /b 0

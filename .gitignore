@@ -12,10 +12,9 @@ delivery/
 __pycache__/
 *.py[cod]
 
-# Secrets and config
+# Local config
 .env
 config.json
-clients/*/branding.json
 
 # OS junk
 Thumbs.db
