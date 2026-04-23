@@ -43,3 +43,58 @@ class TestPalettes:
         """Sanity: dark mode is actually different from light mode."""
         assert LIGHT_PALETTE["surface_base"] != DARK_PALETTE["surface_base"]
         assert LIGHT_PALETTE["text_primary"] != DARK_PALETTE["text_primary"]
+
+
+from container_tracker.ui.theme import (
+    FONT_FAMILY_MONO,
+    FONT_FAMILY_PRIMARY,
+    RADIUS,
+    SPACING,
+    TYPOGRAPHY,
+)
+
+
+class TestTypography:
+    def test_required_keys(self) -> None:
+        required = {"display", "heading", "subheading", "body", "body_bold",
+                    "caption", "hint", "mono"}
+        assert required <= set(TYPOGRAPHY.keys()), (
+            f"missing: {required - set(TYPOGRAPHY.keys())}"
+        )
+
+    def test_specific_sizes_match_spec(self) -> None:
+        assert TYPOGRAPHY["display"]["size"] == 28
+        assert TYPOGRAPHY["heading"]["size"] == 18
+        assert TYPOGRAPHY["subheading"]["size"] == 13
+        assert TYPOGRAPHY["body"]["size"] == 12
+        assert TYPOGRAPHY["caption"]["size"] == 11
+        assert TYPOGRAPHY["hint"]["size"] == 10
+        assert TYPOGRAPHY["mono"]["size"] == 11
+
+    def test_display_is_bold(self) -> None:
+        assert TYPOGRAPHY["display"]["weight"] == "bold"
+
+    def test_mono_uses_mono_family(self) -> None:
+        assert TYPOGRAPHY["mono"]["family"] == FONT_FAMILY_MONO
+
+    def test_body_uses_primary_family(self) -> None:
+        assert TYPOGRAPHY["body"]["family"] == FONT_FAMILY_PRIMARY
+
+    def test_primary_family_is_segoe(self) -> None:
+        # "Segoe UI Variable, Segoe UI" — primary, then fallback for Win10.
+        assert "Segoe UI" in FONT_FAMILY_PRIMARY
+
+    def test_mono_family_is_cascadia(self) -> None:
+        # "Cascadia Code, Consolas" — fallback chain.
+        assert "Cascadia Code" in FONT_FAMILY_MONO
+        assert "Consolas" in FONT_FAMILY_MONO
+
+
+class TestSpacing:
+    def test_scale_values(self) -> None:
+        assert SPACING == {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32}
+
+
+class TestRadius:
+    def test_values(self) -> None:
+        assert RADIUS == {"input": 8, "btn": 8, "card": 12, "cta_pill": 19}

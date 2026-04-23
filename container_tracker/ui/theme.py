@@ -44,3 +44,53 @@ DARK_PALETTE: dict[str, str] = {
     "status_arrived":  "#7FA87F",
     "status_delayed":  "#D48276",
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Typography
+# ─────────────────────────────────────────────────────────────────────────
+
+# Font families use CSS-style fallback chains so QSS resolves the first
+# available face. Segoe UI Variable ships with Windows 11; Segoe UI is the
+# Win10 fallback. Cascadia Code ships with modern Windows; Consolas is the
+# universal fallback.
+FONT_FAMILY_PRIMARY = '"Segoe UI Variable", "Segoe UI"'
+FONT_FAMILY_MONO = '"Cascadia Code", "Consolas"'
+
+
+TYPOGRAPHY: dict[str, dict[str, str | int]] = {
+    "display":    {"family": FONT_FAMILY_PRIMARY, "size": 28, "weight": "bold"},    # stat-card numbers
+    "heading":    {"family": FONT_FAMILY_PRIMARY, "size": 18, "weight": "bold"},    # app title / section heading
+    "subheading": {"family": FONT_FAMILY_PRIMARY, "size": 13, "weight": "bold"},    # CTA button text, dialog labels
+    "body":       {"family": FONT_FAMILY_PRIMARY, "size": 12, "weight": "normal"},  # default
+    "body_bold":  {"family": FONT_FAMILY_PRIMARY, "size": 12, "weight": "bold"},
+    "caption":    {"family": FONT_FAMILY_PRIMARY, "size": 11, "weight": "normal"},
+    "hint":       {"family": FONT_FAMILY_PRIMARY, "size": 10, "weight": "normal"},  # footer / inline help
+    "mono":       {"family": FONT_FAMILY_MONO,    "size": 11, "weight": "normal"},  # activity log
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Spacing (px). Apply via SPACING[key], never ad-hoc numbers.
+# ─────────────────────────────────────────────────────────────────────────
+
+SPACING: dict[str, int] = {
+    "xs":  4,
+    "sm":  8,
+    "md":  12,
+    "lg":  16,
+    "xl":  24,
+    "xxl": 32,
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Corner radius (px).
+# ─────────────────────────────────────────────────────────────────────────
+
+RADIUS: dict[str, int] = {
+    "input":    8,    # entries, combo boxes
+    "btn":      8,    # secondary / ghost buttons
+    "card":    12,    # outlined cards
+    "cta_pill": 19,   # primary CTAs (38px height / 2)
+}
