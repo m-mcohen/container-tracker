@@ -180,3 +180,26 @@ class TestBuildStylesheet:
         assert "Segoe UI" in qss
         # Mono font should appear on QPlainTextEdit.
         assert "Cascadia Code" in qss
+
+
+class TestApplyTheme:
+    """apply_theme mutates QApplication state, so we smoke-test with a real QApplication."""
+
+    def test_apply_theme_runs_without_error_for_both_modes(self) -> None:
+        import sys
+        from PySide6.QtWidgets import QApplication
+        from container_tracker.ui.theme import apply_theme
+
+        # Construct QApplication if one doesn't exist (pytest may have skipped that).
+        app = QApplication.instance() or QApplication(sys.argv)
+        apply_theme(is_dark=False)
+        light_qss = app.styleSheet()
+        assert len(light_qss) > 500
+        assert LIGHT_PALETTE["surface_base"] in light_qss
+
+        apply_theme(is_dark=True)
+        dark_qss = app.styleSheet()
+        assert DARK_PALETTE["surface_base"] in dark_qss
+
+        # Restore light for any downstream tests.
+        apply_theme(is_dark=False)

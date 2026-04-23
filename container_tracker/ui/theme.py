@@ -363,3 +363,27 @@ QToolTip {{
     padding: {s["xs"]}px {s["sm"]}px;
 }}
 """
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Convenience: apply a theme to the running QApplication
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def apply_theme(is_dark: bool) -> None:
+    """Regenerate the full stylesheet from the appropriate palette and apply it.
+
+    Requires a running `QApplication`. Raises `RuntimeError` if none exists.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is None:
+        raise RuntimeError(
+            "apply_theme requires a running QApplication. Construct one first."
+        )
+    palette = DARK_PALETTE if is_dark else LIGHT_PALETTE
+    # QApplication.instance() is typed as QCoreApplication | None; setStyleSheet
+    # lives on QApplication. Runtime guarantee: __main__ constructs a QApplication,
+    # so narrowing via an isinstance check would be boilerplate. Ignore the attr.
+    app.setStyleSheet(build_stylesheet(palette))  # type: ignore[attr-defined]
