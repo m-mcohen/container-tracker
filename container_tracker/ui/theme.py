@@ -152,6 +152,19 @@ QLabel[role="display"] {{
     font-weight: bold;
 }}
 
+/* Stat-card number colors — role-based tint applied to the number QLabel. */
+QLabel[statRole="sailing"] {{
+    color: {p["status_sailing"]};
+}}
+
+QLabel[statRole="arrived"] {{
+    color: {p["status_arrived"]};
+}}
+
+QLabel[statRole="delayed"] {{
+    color: {p["status_delayed"]};
+}}
+
 /* ─── Buttons ──────────────────────────────────────────────────────── */
 QPushButton {{
     background-color: {p["surface_base"]};

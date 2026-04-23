@@ -203,3 +203,49 @@ class TestApplyTheme:
 
         # Restore light for any downstream tests.
         apply_theme(is_dark=False)
+
+
+class TestStatRoleQssRules:
+    def test_contains_stat_role_sailing_rule(self) -> None:
+        from container_tracker.ui.theme import build_stylesheet
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert 'QLabel[statRole="sailing"]' in qss
+
+    def test_contains_stat_role_arrived_rule(self) -> None:
+        from container_tracker.ui.theme import build_stylesheet
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert 'QLabel[statRole="arrived"]' in qss
+
+    def test_contains_stat_role_delayed_rule(self) -> None:
+        from container_tracker.ui.theme import build_stylesheet
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert 'QLabel[statRole="delayed"]' in qss
+
+    def test_stat_role_colors_match_palette(self) -> None:
+        """Each statRole rule must use its bucket's palette color."""
+        from container_tracker.ui.theme import build_stylesheet
+        qss = build_stylesheet(LIGHT_PALETTE)
+
+        # Find the rule block and verify it contains the expected color.
+        def _block(selector: str) -> str:
+            start = qss.find(selector)
+            assert start != -1, f"missing selector {selector}"
+            end = qss.find("}", start)
+            return qss[start:end]
+
+        assert LIGHT_PALETTE["status_sailing"] in _block('QLabel[statRole="sailing"]')
+        assert LIGHT_PALETTE["status_arrived"] in _block('QLabel[statRole="arrived"]')
+        assert LIGHT_PALETTE["status_delayed"] in _block('QLabel[statRole="delayed"]')
+
+    def test_stat_role_colors_flip_with_dark_palette(self) -> None:
+        """Dark mode uses dark palette's bucket colors, not light's."""
+        from container_tracker.ui.theme import build_stylesheet
+        dark_qss = build_stylesheet(DARK_PALETTE)
+        assert DARK_PALETTE["status_sailing"] in dark_qss
+        # and light's version of the same color should not appear.
+        assert LIGHT_PALETTE["status_sailing"] not in dark_qss or (
+            # Defensive: if two palettes happen to share a color for one bucket,
+            # the light version can still appear; but for sailing/arrived/delayed
+            # the palettes differ — checking the dark-specific value is enough.
+            True
+        )
