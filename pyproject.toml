@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "container_tracker"
+version = "1.1.0"
+description = "Container ETA tracker using ShipsGo API"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.6",
+    "requests>=2.31",
+    "openpyxl>=3.1",
+    "keyring>=24.0",
+    "packaging>=23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "responses>=0.24",
+    "mypy>=1.7",
+    "types-requests",
+    "types-openpyxl",
+]
+
+[tool.setuptools.packages.find]
+include = ["container_tracker*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra -q"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["container_tracker/core"]
+
+[[tool.mypy.overrides]]
+module = ["keyring.*", "openpyxl.*", "packaging.*"]
+ignore_missing_imports = true
