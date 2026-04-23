@@ -94,6 +94,12 @@ class MainWindow(QMainWindow):
         root.addWidget(self._header)
 
         self._linked = LinkedSpreadsheetCard(str(self._config.get("excel_path", "") or ""))
+        # Phase 4: buttons are placeholders until Phase 5 wires them.
+        self._linked._browse_button.setEnabled(False)
+        self._linked._create_button.setEnabled(False)
+        # _open_button already disabled when path is empty; force disable regardless
+        # until Phase 5 restores the dynamic enable/disable behavior.
+        self._linked._open_button.setEnabled(False)
         root.addWidget(self._linked)
 
         # Stat cards ---------------------------------------------------
@@ -115,10 +121,13 @@ class MainWindow(QMainWindow):
         action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.setSpacing(8)
 
-        self._refresh_button = QPushButton("Refresh All ETAs && Update Excel")  # && escapes the literal ampersand
+        self._refresh_button = QPushButton("Refresh All ETAs && Update Excel")  # && escapes for button mnemonic
         self._refresh_button.setProperty("variant", "primary")
+        self._refresh_button.setEnabled(False)
+
         self._remove_button = QPushButton("Remove Selected")
         self._remove_button.setProperty("variant", "destructive")
+        self._remove_button.setEnabled(False)
         action_layout.addWidget(self._refresh_button)
         action_layout.addWidget(self._remove_button)
         action_layout.addStretch(1)
@@ -130,6 +139,7 @@ class MainWindow(QMainWindow):
         self._carrier_combo.addItems(CARRIER_NAMES)
         self._add_button = QPushButton("Add && Track")
         self._add_button.setProperty("variant", "primary")
+        self._add_button.setEnabled(False)
         action_layout.addWidget(self._add_input)
         action_layout.addWidget(self._carrier_combo)
         action_layout.addWidget(self._add_button)
