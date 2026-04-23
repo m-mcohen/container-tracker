@@ -70,10 +70,14 @@ def main() -> int:
     )
     logger.info("first-run=%s, api-token-present=%s", is_first_run(config), bool(get_api_token()))
 
-    # Phase 1 stops here — no window yet. Checkpoint C attaches MainWindow.
-    logger.info("Container Tracker bootstrap complete; exiting (Phase 1 Checkpoint B)")
-    _ = qt_handler  # keep reference; in Checkpoint C the main window will connect to it.
-    return 0
+    # Construct and show the main window. The qt_handler signal has no
+    # connected slot yet — ActivityLog wiring arrives in Phase 3.
+    from container_tracker.ui.main_window import MainWindow
+    window = MainWindow()
+    window.show()
+    _ = qt_handler  # keep reference; ActivityLog wiring arrives in Phase 3.
+
+    return app.exec()
 
 
 if __name__ == "__main__":
