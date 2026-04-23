@@ -100,6 +100,7 @@ def read_container_list(path: Path) -> list[str]:
     wb = load_workbook(str(path), data_only=True)
     try:
         ws = wb.active
+        assert ws is not None  # openpyxl always returns a sheet for a loaded workbook
         col = _find_container_column(ws)
         if col is None:
             raise ExcelFormatError(
@@ -128,6 +129,7 @@ def write_tracking_report(path: Path, db: dict[str, dict[str, Any]]) -> int:
     wb = load_workbook(str(path))
     try:
         ws = wb.active
+        assert ws is not None  # openpyxl always returns a sheet for a loaded workbook
         col = _find_container_column(ws)
         if col is None:
             raise ExcelFormatError(
@@ -222,6 +224,7 @@ def create_template(path: Path) -> None:
     """Write a blank linked-spreadsheet template with expected headers and two sample rows."""
     wb = Workbook()
     ws = wb.active
+    assert ws is not None  # new Workbook always has an active sheet
     ws.title = "Container Tracking"
     headers = [
         "Container #", "PO / Reference", "Notes", "Carrier", "Status", "ETA",

@@ -189,7 +189,8 @@ class ShipsGoClient:
         response.raise_for_status()
         data = response.json()
         if isinstance(data, dict):
-            return data.get("shipments", data.get("data", []))  # type: ignore[no-any-return]
+            result = data.get("shipments", data.get("data", []))
+            return result  # type: ignore[return-value]
         return data  # type: ignore[no-any-return]
 
     def get_shipment(self, shipment_id: str) -> dict[str, Any]:
