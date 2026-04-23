@@ -12,6 +12,11 @@ delivery/
 __pycache__/
 *.py[cod]
 
+# Editable install artifacts
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+
 # Local config
 .env
 config.json
