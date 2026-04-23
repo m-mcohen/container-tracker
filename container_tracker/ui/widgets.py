@@ -94,7 +94,7 @@ class StatCard(QFrame):
         return self._number.property(key)
 
 
-from PySide6.QtWidgets import QHBoxLayout, QPushButton
+from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
 
 
 class UpdateBanner(QFrame):
@@ -154,3 +154,70 @@ class UpdateBanner(QFrame):
         self._shown = False
         self.hide()
         self.dismissed.emit()
+
+
+class LinkedSpreadsheetCard(QFrame):
+    """Linked-spreadsheet card: label, current path, three buttons.
+
+    Buttons emit signals (browse_requested, create_requested, open_requested).
+    Phase 3 does not wire them — Phase 5 connects them to file dialogs and
+    the Excel backend.
+    """
+
+    browse_requested = Signal()
+    create_requested = Signal()
+    open_requested = Signal(str)
+
+    _PLACEHOLDER = "No file linked"
+
+    def __init__(self, initial_path: str = "") -> None:
+        super().__init__()
+        self.setProperty("role", "card")
+        self._path = initial_path
+
+        heading = QLabel("Linked spreadsheet")
+        heading.setProperty("role", "secondary")
+
+        self._path_label = QLabel(self._display_path())
+
+        button_row = QWidget()
+        button_layout = QHBoxLayout(button_row)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._browse_button = QPushButton("Browse…")
+        self._browse_button.setProperty("variant", "secondary")
+        self._browse_button.clicked.connect(self.browse_requested.emit)
+
+        self._create_button = QPushButton("Create Template")
+        self._create_button.setProperty("variant", "secondary")
+        self._create_button.clicked.connect(self.create_requested.emit)
+
+        self._open_button = QPushButton("Open in Excel")
+        self._open_button.setProperty("variant", "secondary")
+        self._open_button.clicked.connect(self._on_open_clicked)
+        self._open_button.setEnabled(bool(self._path))
+
+        for btn in (self._browse_button, self._create_button, self._open_button):
+            button_layout.addWidget(btn)
+        button_layout.addStretch(1)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(heading)
+        layout.addWidget(self._path_label)
+        layout.addWidget(button_row)
+
+    def set_path(self, path: str) -> None:
+        """Update the displayed path and enable/disable the Open button."""
+        self._path = path
+        self._path_label.setText(self._display_path())
+        self._open_button.setEnabled(bool(path))
+
+    def path_text(self) -> str:
+        return self._path_label.text()
+
+    def _display_path(self) -> str:
+        return self._path or self._PLACEHOLDER
+
+    def _on_open_clicked(self) -> None:
+        if self._path:
+            self.open_requested.emit(self._path)

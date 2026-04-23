@@ -87,3 +87,54 @@ class TestUpdateBanner:
         banner.open_url_requested.connect(received.append)
         banner._body_button.click()
         assert received == ["https://new"]
+
+
+from container_tracker.ui.widgets import LinkedSpreadsheetCard
+
+
+class TestLinkedSpreadsheetCard:
+    def test_shows_placeholder_when_empty(self, qapp) -> None:
+        card = LinkedSpreadsheetCard("")
+        assert "No file linked" in card.path_text()
+
+    def test_shows_path_when_set(self, qapp) -> None:
+        card = LinkedSpreadsheetCard(r"C:\Users\me\containers.xlsx")
+        assert r"containers.xlsx" in card.path_text()
+
+    def test_set_path_updates_display(self, qapp) -> None:
+        card = LinkedSpreadsheetCard("")
+        card.set_path(r"C:\new.xlsx")
+        assert r"new.xlsx" in card.path_text()
+        card.set_path("")
+        assert "No file linked" in card.path_text()
+
+    def test_browse_button_emits_signal(self, qapp) -> None:
+        card = LinkedSpreadsheetCard("")
+        received: list[object] = []
+        card.browse_requested.connect(lambda: received.append("browse"))
+        card._browse_button.click()
+        assert received == ["browse"]
+
+    def test_create_button_emits_signal(self, qapp) -> None:
+        card = LinkedSpreadsheetCard("")
+        received: list[object] = []
+        card.create_requested.connect(lambda: received.append("create"))
+        card._create_button.click()
+        assert received == ["create"]
+
+    def test_open_button_emits_signal_with_current_path(self, qapp) -> None:
+        path = r"C:\Users\me\containers.xlsx"
+        card = LinkedSpreadsheetCard(path)
+        received: list[str] = []
+        card.open_requested.connect(received.append)
+        card._open_button.click()
+        assert received == [path]
+
+    def test_open_button_disabled_when_path_empty(self, qapp) -> None:
+        card = LinkedSpreadsheetCard("")
+        assert card._open_button.isEnabled() is False
+
+    def test_open_button_reenabled_when_path_set(self, qapp) -> None:
+        card = LinkedSpreadsheetCard("")
+        card.set_path(r"C:\new.xlsx")
+        assert card._open_button.isEnabled() is True
