@@ -37,8 +37,8 @@ DARK_PALETTE: dict[str, str] = {
     "text_primary":    "#F0EDE5",  # warm off-white
     "text_secondary":  "#A8A59D",
     "text_tertiary":   "#6E6C66",
-    "accent":          "#6B9DD4",  # brightened navy for dark-mode contrast
-    "accent_hover":    "#84B0E0",
+    "accent":          "#3E74B8",  # saturated navy-blue — matches light-mode navy weight
+    "accent_hover":    "#5689C8",  # lighter hover
     "accent_subtle":   "#1C2836",
     "status_sailing":  "#6B9DD4",
     "status_arrived":  "#7FA87F",

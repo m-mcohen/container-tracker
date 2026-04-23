@@ -151,7 +151,7 @@ class TestBuildStylesheet:
     def test_dark_palette_colors_are_embedded(self) -> None:
         qss = build_stylesheet(DARK_PALETTE)
         assert DARK_PALETTE["surface_base"] in qss           # #15171C
-        assert DARK_PALETTE["accent"] in qss                 # #6B9DD4
+        assert DARK_PALETTE["accent"] in qss                 # #3E74B8 (Phase 4 polish)
         assert DARK_PALETTE["status_delayed"] in qss         # #D48276
 
     def test_light_and_dark_produce_different_output(self) -> None:
@@ -249,3 +249,16 @@ class TestStatRoleQssRules:
             # the palettes differ — checking the dark-specific value is enough.
             True
         )
+
+
+class TestDarkModeAccentPolish:
+    """Phase 4 polish: dark-mode accent is no longer the washed-out pale blue."""
+
+    def test_dark_accent_is_saturated_navy_not_pale_blue(self) -> None:
+        # Old value was #6B9DD4 (too light). New value is #3E74B8.
+        assert DARK_PALETTE["accent"].upper() == "#3E74B8"
+        assert DARK_PALETTE["accent_hover"].upper() == "#5689C8"
+
+    def test_dark_accent_distinct_from_status_sailing(self) -> None:
+        """Brand accent and sailing status should not be the same color."""
+        assert DARK_PALETTE["accent"] != DARK_PALETTE["status_sailing"]
