@@ -1,0 +1,22 @@
+# PyInstaller build output
+build/
+dist/
+
+# PyInstaller spec (auto-generated)
+*.spec
+
+# Delivery folder (compiled installers)
+delivery/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Secrets and config
+.env
+config.json
+clients/*/branding.json
+
+# OS junk
+Thumbs.db
+desktop.ini
