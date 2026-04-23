@@ -121,3 +121,83 @@ def extract_fields(shipment: dict[str, Any]) -> dict[str, Any]:
                     break
 
     return fields
+
+
+import requests
+
+
+API_BASE = "https://api.shipsgo.com/v2"
+
+
+class ShipsGoAuthError(Exception):
+    """Raised when ShipsGo rejects the API token (HTTP 401).
+
+    The UI layer catches this specifically to surface a modal prompting the
+    user to open Settings and update their key.
+    """
+
+
+class ShipsGoClient:
+    """Synchronous client for the ShipsGo v2 ocean-shipments endpoints.
+
+    Constructor is cheap — builds a requests.Session but makes no network
+    calls. Thread-safety: reuse a single client across background QRunnables
+    is fine, but each call is independent (no shared mutable state beyond the
+    session's connection pool).
+    """
+
+    def __init__(self, token: str) -> None:
+        self.session = requests.Session()
+        self.session.headers.update({
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "X-Shipsgo-User-Token": token,
+        })
+
+    def create_shipment(
+        self,
+        container_number: str = "",
+        carrier_scac: str = "",
+    ) -> dict[str, Any]:
+        payload: dict[str, str] = {}
+        if container_number:
+            payload["container_number"] = container_number.strip().upper()
+        if carrier_scac:
+            payload["carrier_scac"] = carrier_scac.strip().upper()
+        response = self.session.post(
+            f"{API_BASE}/ocean/shipments",
+            json=payload,
+            timeout=30,
+        )
+        if response.status_code == 401:
+            raise ShipsGoAuthError("ShipsGo rejected the API token")
+        if response.status_code == 409:
+            return {"already_exists": True}
+        if response.status_code == 402:
+            return {"error": "NOT_ENOUGH_CREDITS"}
+        response.raise_for_status()
+        return response.json()  # type: ignore[no-any-return]
+
+    def list_shipments(self, take: int = 100) -> list[dict[str, Any]]:
+        response = self.session.get(
+            f"{API_BASE}/ocean/shipments",
+            params={"take": take},
+            timeout=30,
+        )
+        if response.status_code == 401:
+            raise ShipsGoAuthError("ShipsGo rejected the API token")
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict):
+            return data.get("shipments", data.get("data", []))  # type: ignore[no-any-return]
+        return data  # type: ignore[no-any-return]
+
+    def get_shipment(self, shipment_id: str) -> dict[str, Any]:
+        response = self.session.get(
+            f"{API_BASE}/ocean/shipments/{shipment_id}",
+            timeout=30,
+        )
+        if response.status_code == 401:
+            raise ShipsGoAuthError("ShipsGo rejected the API token")
+        response.raise_for_status()
+        return response.json()  # type: ignore[no-any-return]

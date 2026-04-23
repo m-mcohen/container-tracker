@@ -112,3 +112,148 @@ class TestExtractFields:
             ]}]
         }}
         assert extract_fields(payload)["vessel"] == "MV B"
+
+
+import pytest
+import responses
+
+from container_tracker.core.api import API_BASE, ShipsGoAuthError, ShipsGoClient
+
+
+class TestShipsGoClient:
+    @responses.activate
+    def test_create_shipment_success(self) -> None:
+        responses.add(
+            responses.POST,
+            f"{API_BASE}/ocean/shipments",
+            json={"id": "ship_new_001"},
+            status=200,
+        )
+        client = ShipsGoClient("tok-valid")
+        result = client.create_shipment(container_number="mSKu1234567", carrier_scac="maeu")
+        assert result == {"id": "ship_new_001"}
+
+        # Verify the request body upper-cased the container number and SCAC
+        request = responses.calls[0].request
+        import json as _json
+        body = _json.loads(request.body)
+        assert body["container_number"] == "MSKU1234567"
+        assert body["carrier_scac"] == "MAEU"
+        assert request.headers["X-Shipsgo-User-Token"] == "tok-valid"
+
+    @responses.activate
+    def test_create_shipment_already_tracked_409(self) -> None:
+        responses.add(
+            responses.POST,
+            f"{API_BASE}/ocean/shipments",
+            json={"error": "already exists"},
+            status=409,
+        )
+        client = ShipsGoClient("tok")
+        result = client.create_shipment(container_number="MSKU1234567")
+        assert result == {"already_exists": True}
+
+    @responses.activate
+    def test_create_shipment_insufficient_credits_402(self) -> None:
+        responses.add(
+            responses.POST,
+            f"{API_BASE}/ocean/shipments",
+            json={"error": "no credits"},
+            status=402,
+        )
+        client = ShipsGoClient("tok")
+        result = client.create_shipment(container_number="MSKU1234567")
+        assert result == {"error": "NOT_ENOUGH_CREDITS"}
+
+    @responses.activate
+    def test_create_shipment_401_raises_auth_error(self) -> None:
+        responses.add(
+            responses.POST,
+            f"{API_BASE}/ocean/shipments",
+            json={"error": "invalid token"},
+            status=401,
+        )
+        client = ShipsGoClient("tok-bad")
+        with pytest.raises(ShipsGoAuthError):
+            client.create_shipment(container_number="MSKU1234567")
+
+    @responses.activate
+    def test_list_shipments_401_raises_auth_error(self) -> None:
+        responses.add(
+            responses.GET,
+            f"{API_BASE}/ocean/shipments",
+            json={"error": "invalid token"},
+            status=401,
+        )
+        client = ShipsGoClient("tok-bad")
+        with pytest.raises(ShipsGoAuthError):
+            client.list_shipments()
+
+    @responses.activate
+    def test_get_shipment_401_raises_auth_error(self) -> None:
+        responses.add(
+            responses.GET,
+            f"{API_BASE}/ocean/shipments/ship_x",
+            json={"error": "invalid token"},
+            status=401,
+        )
+        client = ShipsGoClient("tok-bad")
+        with pytest.raises(ShipsGoAuthError):
+            client.get_shipment("ship_x")
+
+    @responses.activate
+    def test_list_shipments_unwraps_shipments_key(self) -> None:
+        responses.add(
+            responses.GET,
+            f"{API_BASE}/ocean/shipments",
+            json={"shipments": [{"id": "a"}, {"id": "b"}]},
+            status=200,
+        )
+        client = ShipsGoClient("tok")
+        assert client.list_shipments() == [{"id": "a"}, {"id": "b"}]
+
+    @responses.activate
+    def test_list_shipments_unwraps_data_key(self) -> None:
+        responses.add(
+            responses.GET,
+            f"{API_BASE}/ocean/shipments",
+            json={"data": [{"id": "a"}]},
+            status=200,
+        )
+        client = ShipsGoClient("tok")
+        assert client.list_shipments() == [{"id": "a"}]
+
+    @responses.activate
+    def test_list_shipments_passes_list_through(self) -> None:
+        responses.add(
+            responses.GET,
+            f"{API_BASE}/ocean/shipments",
+            json=[{"id": "a"}],
+            status=200,
+        )
+        client = ShipsGoClient("tok")
+        assert client.list_shipments() == [{"id": "a"}]
+
+    @responses.activate
+    def test_get_shipment_returns_json(self) -> None:
+        responses.add(
+            responses.GET,
+            f"{API_BASE}/ocean/shipments/ship_x",
+            json={"shipment": {"id": "ship_x", "status": "SAILING"}},
+            status=200,
+        )
+        client = ShipsGoClient("tok")
+        result = client.get_shipment("ship_x")
+        assert result["shipment"]["status"] == "SAILING"
+
+    @responses.activate
+    def test_500_raises_http_error(self) -> None:
+        import requests
+        responses.add(
+            responses.GET,
+            f"{API_BASE}/ocean/shipments",
+            status=500,
+        )
+        client = ShipsGoClient("tok")
+        with pytest.raises(requests.HTTPError):
+            client.list_shipments()
