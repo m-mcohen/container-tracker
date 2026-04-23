@@ -98,3 +98,85 @@ class TestSpacing:
 class TestRadius:
     def test_values(self) -> None:
         assert RADIUS == {"input": 8, "btn": 8, "card": 12, "cta_pill": 19}
+
+
+from container_tracker.ui.theme import build_stylesheet
+
+
+class TestBuildStylesheet:
+    def test_returns_non_empty_string(self) -> None:
+        assert len(build_stylesheet(LIGHT_PALETTE)) > 500  # sanity: it's a real stylesheet
+
+    def test_contains_widget_base_rule(self) -> None:
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert "QWidget" in qss
+
+    def test_contains_all_button_variants(self) -> None:
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert 'QPushButton[variant="primary"]' in qss
+        assert 'QPushButton[variant="secondary"]' in qss
+        assert 'QPushButton[variant="destructive"]' in qss
+
+    def test_contains_button_hover_states(self) -> None:
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert 'QPushButton[variant="primary"]:hover' in qss
+        assert 'QPushButton[variant="secondary"]:hover' in qss
+
+    def test_contains_input_selectors(self) -> None:
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert "QLineEdit" in qss
+        assert "QComboBox" in qss
+        assert "QLineEdit:focus" in qss
+
+    def test_contains_table_selectors(self) -> None:
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert "QTableView" in qss
+        assert "QHeaderView::section" in qss
+
+    def test_contains_card_role_selectors(self) -> None:
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert 'QFrame[role="card"]' in qss
+        assert 'QFrame[role="stat-card"]' in qss
+
+    def test_contains_activity_log_selector(self) -> None:
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert "QPlainTextEdit" in qss
+
+    def test_light_palette_colors_are_embedded(self) -> None:
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert LIGHT_PALETTE["surface_base"] in qss          # #FAF8F3
+        assert LIGHT_PALETTE["accent"] in qss                # #1E3A5F
+        assert LIGHT_PALETTE["status_delayed"] in qss        # #B05A4D
+
+    def test_dark_palette_colors_are_embedded(self) -> None:
+        qss = build_stylesheet(DARK_PALETTE)
+        assert DARK_PALETTE["surface_base"] in qss           # #15171C
+        assert DARK_PALETTE["accent"] in qss                 # #6B9DD4
+        assert DARK_PALETTE["status_delayed"] in qss         # #D48276
+
+    def test_light_and_dark_produce_different_output(self) -> None:
+        assert build_stylesheet(LIGHT_PALETTE) != build_stylesheet(DARK_PALETTE)
+
+    def test_pure_red_is_not_present_in_light(self) -> None:
+        """Spec §5.1: the v1.0.0 pure-red #D32F2F bug is fixed in v1.1.0."""
+        qss = build_stylesheet(LIGHT_PALETTE)
+        assert "#D32F2F" not in qss
+        assert "#d32f2f" not in qss
+
+    def test_cta_pill_radius_appears(self) -> None:
+        """Primary CTA button must be pill-shaped (radius 19)."""
+        from container_tracker.ui.theme import RADIUS
+        qss = build_stylesheet(LIGHT_PALETTE)
+        # The primary-button rule should reference the CTA pill radius.
+        # Look for "19px" in the primary-button section specifically.
+        primary_section_start = qss.find('QPushButton[variant="primary"]')
+        primary_section_end = qss.find('}', primary_section_start)
+        assert str(RADIUS["cta_pill"]) + "px" in qss[primary_section_start:primary_section_end]
+
+    def test_font_family_embedded(self) -> None:
+        from container_tracker.ui.theme import FONT_FAMILY_MONO, FONT_FAMILY_PRIMARY
+        qss = build_stylesheet(LIGHT_PALETTE)
+        # Segoe UI Variable should appear somewhere (on QWidget or body text).
+        assert "Segoe UI" in qss
+        # Mono font should appear on QPlainTextEdit.
+        assert "Cascadia Code" in qss

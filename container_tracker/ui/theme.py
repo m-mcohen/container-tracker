@@ -94,3 +94,272 @@ RADIUS: dict[str, int] = {
     "card":    12,    # outlined cards
     "cta_pill": 19,   # primary CTAs (38px height / 2)
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# QSS generator
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def build_stylesheet(palette: dict[str, str]) -> str:
+    """Return a complete Qt stylesheet built from `palette`.
+
+    Theme swap is done by calling this function with a different palette and
+    passing the result to `QApplication.instance().setStyleSheet(...)`. No
+    per-widget styling; everything flows through the app-level stylesheet.
+    """
+    p = palette
+    r = RADIUS
+    s = SPACING
+    fp = FONT_FAMILY_PRIMARY
+    fm = FONT_FAMILY_MONO
+
+    return f"""
+/* ─── Base ─────────────────────────────────────────────────────────── */
+QWidget {{
+    background-color: {p["surface_base"]};
+    color: {p["text_primary"]};
+    font-family: {fp};
+    font-size: {TYPOGRAPHY["body"]["size"]}pt;
+}}
+
+QMainWindow, QDialog {{
+    background-color: {p["surface_base"]};
+}}
+
+/* ─── Labels ───────────────────────────────────────────────────────── */
+QLabel {{
+    background-color: transparent;
+    color: {p["text_primary"]};
+}}
+
+QLabel[role="secondary"] {{
+    color: {p["text_secondary"]};
+}}
+
+QLabel[role="hint"] {{
+    color: {p["text_tertiary"]};
+    font-size: {TYPOGRAPHY["hint"]["size"]}pt;
+}}
+
+QLabel[role="heading"] {{
+    font-size: {TYPOGRAPHY["heading"]["size"]}pt;
+    font-weight: bold;
+}}
+
+QLabel[role="display"] {{
+    font-size: {TYPOGRAPHY["display"]["size"]}pt;
+    font-weight: bold;
+}}
+
+/* ─── Buttons ──────────────────────────────────────────────────────── */
+QPushButton {{
+    background-color: {p["surface_base"]};
+    color: {p["text_primary"]};
+    border: 1px solid {p["border"]};
+    border-radius: {r["btn"]}px;
+    padding: {s["xs"]}px {s["md"]}px;
+    font-family: {fp};
+    font-size: {TYPOGRAPHY["body"]["size"]}pt;
+    min-height: 28px;
+}}
+
+QPushButton:hover {{
+    background-color: {p["surface_subtle"]};
+}}
+
+QPushButton:disabled {{
+    color: {p["text_tertiary"]};
+    border-color: {p["border_subtle"]};
+}}
+
+/* Primary CTA — solid accent fill, pill-shaped */
+QPushButton[variant="primary"] {{
+    background-color: {p["accent"]};
+    color: #FFFFFF;
+    border: 1px solid {p["accent"]};
+    border-radius: {r["cta_pill"]}px;
+    padding: {s["sm"]}px {s["xl"]}px;
+    font-size: {TYPOGRAPHY["subheading"]["size"]}pt;
+    font-weight: bold;
+    min-height: 38px;
+}}
+
+QPushButton[variant="primary"]:hover {{
+    background-color: {p["accent_hover"]};
+    border-color: {p["accent_hover"]};
+}}
+
+QPushButton[variant="primary"]:disabled {{
+    background-color: {p["text_tertiary"]};
+    border-color: {p["text_tertiary"]};
+    color: #FFFFFF;
+}}
+
+/* Secondary / ghost — transparent bg, accent border + text */
+QPushButton[variant="secondary"] {{
+    background-color: transparent;
+    color: {p["accent"]};
+    border: 1px solid {p["accent"]};
+    border-radius: {r["btn"]}px;
+    padding: {s["xs"]}px {s["md"]}px;
+    font-weight: bold;
+}}
+
+QPushButton[variant="secondary"]:hover {{
+    background-color: {p["accent_subtle"]};
+}}
+
+/* Destructive — muted rust fill, white text, 8px corners (not pill) */
+QPushButton[variant="destructive"] {{
+    background-color: {p["status_delayed"]};
+    color: #FFFFFF;
+    border: 1px solid {p["status_delayed"]};
+    border-radius: {r["btn"]}px;
+    padding: {s["xs"]}px {s["md"]}px;
+    font-weight: bold;
+}}
+
+QPushButton[variant="destructive"]:hover {{
+    /* Slightly darker on hover via CSS-like technique: overlay accent_hover is navy
+       and wrong here; keep the rust but lift with a subtle border tint. */
+    background-color: {p["status_delayed"]};
+    border-color: {p["accent_hover"]};
+}}
+
+/* ─── Inputs ───────────────────────────────────────────────────────── */
+QLineEdit, QComboBox {{
+    background-color: {p["surface_base"]};
+    color: {p["text_primary"]};
+    border: 1px solid {p["border"]};
+    border-radius: {r["input"]}px;
+    padding: {s["xs"]}px {s["sm"]}px;
+    selection-background-color: {p["accent_subtle"]};
+    selection-color: {p["text_primary"]};
+    min-height: 28px;
+}}
+
+QLineEdit:focus, QComboBox:focus {{
+    border-color: {p["accent"]};
+}}
+
+QLineEdit:disabled, QComboBox:disabled {{
+    color: {p["text_tertiary"]};
+    border-color: {p["border_subtle"]};
+}}
+
+QComboBox::drop-down {{
+    border: none;
+    width: 24px;
+}}
+
+QComboBox QAbstractItemView {{
+    background-color: {p["surface_card"]};
+    color: {p["text_primary"]};
+    border: 1px solid {p["border"]};
+    selection-background-color: {p["accent_subtle"]};
+    selection-color: {p["text_primary"]};
+}}
+
+/* ─── Cards ────────────────────────────────────────────────────────── */
+QFrame[role="card"] {{
+    background-color: transparent;
+    border: 1px solid {p["border"]};
+    border-radius: {r["card"]}px;
+    padding: {s["lg"]}px;
+}}
+
+QFrame[role="stat-card"] {{
+    background-color: transparent;
+    border: 1px solid {p["border"]};
+    border-radius: {r["card"]}px;
+    padding: {s["md"]}px {s["lg"]}px;
+}}
+
+/* ─── Table ────────────────────────────────────────────────────────── */
+QTableView {{
+    background-color: {p["surface_base"]};
+    alternate-background-color: {p["surface_base"]};
+    color: {p["text_primary"]};
+    gridline-color: {p["border_subtle"]};
+    border: 1px solid {p["border_subtle"]};
+    selection-background-color: {p["accent_subtle"]};
+    selection-color: {p["text_primary"]};
+}}
+
+QHeaderView::section {{
+    background-color: {p["surface_subtle"]};
+    color: {p["text_secondary"]};
+    border: none;
+    border-bottom: 1px solid {p["border"]};
+    padding: {s["sm"]}px {s["md"]}px;
+    font-weight: bold;
+}}
+
+QTableView::item {{
+    padding: {s["xs"]}px {s["sm"]}px;
+    border: none;
+    border-bottom: 1px solid {p["border_subtle"]};
+}}
+
+/* ─── Activity log / plain text ────────────────────────────────────── */
+QPlainTextEdit, QTextEdit {{
+    background-color: {p["surface_subtle"]};
+    color: {p["text_primary"]};
+    border: 1px solid {p["border_subtle"]};
+    border-radius: {r["btn"]}px;
+    font-family: {fm};
+    font-size: {TYPOGRAPHY["mono"]["size"]}pt;
+    padding: {s["sm"]}px;
+}}
+
+/* ─── Scrollbars (minimal, neutral) ────────────────────────────────── */
+QScrollBar:vertical {{
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}}
+
+QScrollBar::handle:vertical {{
+    background: {p["border"]};
+    border-radius: 5px;
+    min-height: 24px;
+}}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0;
+    background: transparent;
+}}
+
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 10px;
+}}
+
+QScrollBar::handle:horizontal {{
+    background: {p["border"]};
+    border-radius: 5px;
+    min-width: 24px;
+}}
+
+/* ─── Menus ────────────────────────────────────────────────────────── */
+QMenu {{
+    background-color: {p["surface_card"]};
+    color: {p["text_primary"]};
+    border: 1px solid {p["border"]};
+    border-radius: {r["btn"]}px;
+    padding: {s["xs"]}px 0;
+}}
+
+QMenu::item:selected {{
+    background-color: {p["accent_subtle"]};
+}}
+
+/* ─── Tool-tip ─────────────────────────────────────────────────────── */
+QToolTip {{
+    background-color: {p["surface_card"]};
+    color: {p["text_primary"]};
+    border: 1px solid {p["border"]};
+    padding: {s["xs"]}px {s["sm"]}px;
+}}
+"""
