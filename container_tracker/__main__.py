@@ -70,13 +70,16 @@ def main() -> int:
     )
     logger.info("first-run=%s, api-token-present=%s", is_first_run(config), bool(get_api_token()))
 
-    # Construct and show the main window. The qt_handler signal has no
-    # connected slot yet — ActivityLog wiring arrives in Phase 3.
-    from container_tracker.ui.main_window import MainWindow
-    window = MainWindow()
-    window.show()
-    _ = qt_handler  # keep reference; ActivityLog wiring arrives in Phase 3.
+    # Apply the theme BEFORE constructing any widgets so they inherit from
+    # the application-level stylesheet on first paint (no un-styled flash).
+    from container_tracker.ui.theme import apply_theme
+    apply_theme(is_dark=bool(config.get("dark_mode", False)))
 
+    from container_tracker.ui.main_window import MainWindow
+    window = MainWindow(config)
+    window.show()
+
+    _ = qt_handler  # will be connected to ActivityLog in Phase 3
     return app.exec()
 
 
