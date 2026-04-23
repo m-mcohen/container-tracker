@@ -221,3 +221,56 @@ class LinkedSpreadsheetCard(QFrame):
     def _on_open_clicked(self) -> None:
         if self._path:
             self.open_requested.emit(self._path)
+
+
+from PySide6.QtWidgets import QCheckBox
+
+
+class HeaderRow(QWidget):
+    """Top header row: title + subtitle on the left, settings gear + dark-mode toggle on the right."""
+
+    settings_clicked = Signal()
+    dark_mode_toggled = Signal(bool)
+
+    def __init__(self, title: str, subtitle: str, is_dark: bool = False) -> None:
+        super().__init__()
+
+        self._title = QLabel(title)
+        self._title.setProperty("role", "heading")
+
+        self._subtitle = QLabel(subtitle)
+        self._subtitle.setProperty("role", "secondary")
+
+        left = QVBoxLayout()
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(2)
+        left.addWidget(self._title)
+        left.addWidget(self._subtitle)
+
+        self._settings_button = QPushButton("⚙")
+        self._settings_button.setFixedSize(32, 32)
+        self._settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._settings_button.setToolTip("Settings")
+        self._settings_button.clicked.connect(self.settings_clicked.emit)
+
+        self._dark_mode_toggle = QCheckBox("Dark mode")
+        self._dark_mode_toggle.setChecked(is_dark)
+        self._dark_mode_toggle.stateChanged.connect(self._on_toggle_changed)
+
+        layout = QHBoxLayout(self)
+        layout.addLayout(left)
+        layout.addStretch(1)
+        layout.addWidget(self._settings_button)
+        layout.addWidget(self._dark_mode_toggle)
+
+    def title_text(self) -> str:
+        return self._title.text()
+
+    def subtitle_text(self) -> str:
+        return self._subtitle.text()
+
+    def set_subtitle(self, text: str) -> None:
+        self._subtitle.setText(text)
+
+    def _on_toggle_changed(self, state: int) -> None:
+        self.dark_mode_toggled.emit(state == Qt.CheckState.Checked.value)

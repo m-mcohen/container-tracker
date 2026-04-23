@@ -138,3 +138,39 @@ class TestLinkedSpreadsheetCard:
         card = LinkedSpreadsheetCard("")
         card.set_path(r"C:\new.xlsx")
         assert card._open_button.isEnabled() is True
+
+
+from container_tracker.ui.widgets import HeaderRow
+
+
+class TestHeaderRow:
+    def test_renders_title_and_subtitle(self, qapp) -> None:
+        header = HeaderRow(title="Container Tracker", subtitle="Ken Gabbay Coffee")
+        assert header.title_text() == "Container Tracker"
+        assert header.subtitle_text() == "Ken Gabbay Coffee"
+
+    def test_empty_subtitle_is_accepted(self, qapp) -> None:
+        header = HeaderRow(title="Container Tracker", subtitle="")
+        assert header.subtitle_text() == ""
+
+    def test_settings_button_emits_signal(self, qapp) -> None:
+        header = HeaderRow(title="Container Tracker", subtitle="Acme")
+        received: list[object] = []
+        header.settings_clicked.connect(lambda: received.append("settings"))
+        header._settings_button.click()
+        assert received == ["settings"]
+
+    def test_dark_mode_checkbox_emits_signal(self, qapp) -> None:
+        header = HeaderRow(title="Container Tracker", subtitle="Acme")
+        received: list[bool] = []
+        header.dark_mode_toggled.connect(received.append)
+        header._dark_mode_toggle.setChecked(True)
+        assert received == [True]
+        header._dark_mode_toggle.setChecked(False)
+        assert received == [True, False]
+
+    def test_dark_mode_initial_state_respected(self, qapp) -> None:
+        header_off = HeaderRow(title="Container Tracker", subtitle="", is_dark=False)
+        header_on = HeaderRow(title="Container Tracker", subtitle="", is_dark=True)
+        assert header_off._dark_mode_toggle.isChecked() is False
+        assert header_on._dark_mode_toggle.isChecked() is True
