@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
 
         self._build_layout()
         self._populate_sample_data()
+        self._table.resizeColumnsToContents()
 
         logger.info("MainWindow constructed (is_dark=%s)", self._is_dark)
 
@@ -147,8 +148,13 @@ class MainWindow(QMainWindow):
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._table.setAlternatingRowColors(False)
         self._table.verticalHeader().setVisible(False)
-        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self._table.horizontalHeader().setStretchLastSection(True)
+        header = self._table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setStretchLastSection(True)
+        # Keep user-resizable after the initial sizing so the user can still adjust.
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        # Prevent any column from collapsing below a readable width even if the content is empty.
+        header.setMinimumSectionSize(60)
         root.addWidget(self._table, stretch=1)
 
         # Activity log -------------------------------------------------
