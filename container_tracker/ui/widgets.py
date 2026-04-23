@@ -35,3 +35,60 @@ class QtLogHandler(QObject, logging.Handler):
             self.handleError(record)
             return
         self.log_emitted.emit(message)
+
+
+from typing import Literal
+
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+
+
+StatColorRole = Literal["sailing", "arrived", "delayed"]
+_VALID_COLOR_ROLES = {"sailing", "arrived", "delayed"}
+
+
+class StatCard(QFrame):
+    """Outlined stat card: label above, large number below.
+
+    `color_role` tints the number per bucket; None / omitted falls back to
+    default text color. Wiring is pure QSS property selectors — no per-widget
+    setStyleSheet.
+    """
+
+    def __init__(
+        self,
+        label: str,
+        number: int | str,
+        color_role: StatColorRole | None = None,
+    ) -> None:
+        super().__init__()
+        if color_role is not None and color_role not in _VALID_COLOR_ROLES:
+            raise ValueError(
+                f"color_role must be one of {_VALID_COLOR_ROLES} or None; got {color_role!r}"
+            )
+        self.setProperty("role", "stat-card")
+
+        self._label = QLabel(label)
+        self._label.setProperty("role", "secondary")
+
+        self._number = QLabel(str(number))
+        self._number.setProperty("role", "display")
+        if color_role is not None:
+            self._number.setProperty("statRole", color_role)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self._label)
+        layout.addWidget(self._number)
+
+    def set_number(self, value: int | str) -> None:
+        """Update the displayed number without reconstructing the widget."""
+        self._number.setText(str(value))
+
+    def label_text(self) -> str:
+        return self._label.text()
+
+    def number_text(self) -> str:
+        return self._number.text()
+
+    def number_label_property(self, key: str) -> object:
+        """Return a Qt property set on the number QLabel (used by tests)."""
+        return self._number.property(key)
