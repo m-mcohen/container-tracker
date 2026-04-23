@@ -180,7 +180,7 @@ class MainWindow(QMainWindow):
         footer_layout.setContentsMargins(0, 0, 0, 0)
         left = QLabel("Powered by ShipsGo API")
         left.setProperty("role", "hint")
-        right = QLabel("Refreshes are free && unlimited • All times EST")
+        right = QLabel("Refreshes are free & unlimited • All times EST")
         right.setProperty("role", "hint")
         footer_layout.addWidget(left)
         footer_layout.addStretch(1)
