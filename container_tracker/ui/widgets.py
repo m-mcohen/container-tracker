@@ -24,7 +24,11 @@ class QtLogHandler(QObject, logging.Handler):
         QObject.__init__(self)
         logging.Handler.__init__(self)
 
-    def emit(self, record: logging.LogRecord) -> None:
+    def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
+        # Signature collision is expected: QObject.emit (the raw signal emitter)
+        # vs logging.Handler.emit(record) under multiple inheritance. Runtime is
+        # correct — logging dispatches records via self.emit(record), and we
+        # fire the signal via self.log_emitted.emit(message), not self.emit.
         try:
             message = self.format(record)
         except Exception:
