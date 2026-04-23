@@ -44,3 +44,46 @@ class TestStatCard:
     def test_invalid_color_role_raises(self, qapp) -> None:
         with pytest.raises(ValueError):
             StatCard("Test", 1, color_role="bogus")
+
+
+from container_tracker.ui.widgets import UpdateBanner
+
+
+class TestUpdateBanner:
+    def test_hidden_by_default(self, qapp) -> None:
+        banner = UpdateBanner()
+        assert banner.isVisibleTo(None) is False  # equivalent to isHidden check
+
+    def test_show_update_sets_version_text_and_reveals(self, qapp) -> None:
+        banner = UpdateBanner()
+        banner.show_update("1.2.0", "https://github.com/m-mcohen/container-tracker/releases/v1.2.0")
+        assert "1.2.0" in banner.message_text()
+        # Visibility governed by parent; use the internal shown flag instead.
+        assert banner.is_shown() is True
+
+    def test_dismiss_hides_and_emits_signal(self, qapp) -> None:
+        banner = UpdateBanner()
+        banner.show_update("1.2.0", "https://...")
+        received: list[str] = []
+        banner.dismissed.connect(lambda: received.append("dismissed"))
+        banner._dismiss_button.click()
+        assert banner.is_shown() is False
+        assert received == ["dismissed"]
+
+    def test_click_body_emits_open_url_requested_with_url(self, qapp) -> None:
+        banner = UpdateBanner()
+        url = "https://github.com/m-mcohen/container-tracker/releases/v1.2.0"
+        banner.show_update("1.2.0", url)
+        received: list[str] = []
+        banner.open_url_requested.connect(received.append)
+        banner._body_button.click()
+        assert received == [url]
+
+    def test_show_update_overwrites_previous_url(self, qapp) -> None:
+        banner = UpdateBanner()
+        banner.show_update("1.2.0", "https://old")
+        banner.show_update("1.3.0", "https://new")
+        received: list[str] = []
+        banner.open_url_requested.connect(received.append)
+        banner._body_button.click()
+        assert received == ["https://new"]
