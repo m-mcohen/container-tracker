@@ -1,4 +1,4 @@
-# Ken Gabbay Container Tracker
+# Container Tracker
 
 ## What This App Does
 
@@ -6,30 +6,42 @@ Tracks your shipping containers across MSC, Maersk, CMA CGM, Hapag-Lloyd, and ot
 
 ## First-Time Setup
 
-1. Run the Setup file (`KenGabbayTracker_Setup_v1.0.0.exe`) and follow the prompts.
-2. Launch the app from your desktop or Start menu.
-3. When prompted, paste in your ShipsGo API key. You only do this once — the key is stored securely in Windows Credential Manager and never asked for again.
+1. Run the Setup file (`ContainerTracker_Setup_v1.0.0.exe`) and follow the prompts.
+2. Launch Container Tracker from your desktop or Start menu.
+3. A Welcome dialog will ask for three things:
+   - **Company name** — whatever you'd like the app to display.
+   - **ShipsGo API key** — paste your UUID-format v2 token. Find it at [shipsgo.com](https://shipsgo.com) under Dashboard → Integrations → ShipsGo API.
+   - **Contact email** — your support/contact address.
+4. Click Save. These values are stored securely (the API key goes into Windows Credential Manager, never a plain-text file) and the app remembers them going forward.
 
 ## Daily Use
 
 1. Open the app.
-2. Click **Refresh** to pull the latest status from the carriers.
-3. Click **Export to Excel** to save the updated data to your spreadsheet.
+2. Click **Refresh All ETAs & Update Excel** to pull the latest status from the carriers and write it to your linked spreadsheet.
+3. Use the **Add** field and carrier dropdown to track new containers.
+4. Use the **Linked spreadsheet** section to choose, create, or open your Excel file.
 
-That's it.
+Refreshes are unlimited and free — you only consume ShipsGo credits when adding a new container for the first time.
+
+## Updating Your Settings
+
+Click the gear icon (⚙) in the top-right of the main window to edit your company name, API key, or contact email.
 
 ## Where Your Data Lives
 
 All your configuration, tracking data, and logs are stored in:
 
-`%APPDATA%\Ken Gabbay Coffee\KenGabbayTracker\`
+`%APPDATA%\ContainerTracker\`
 
 You can paste that path directly into the Windows Explorer address bar to open the folder.
 
 ## Getting Updates
 
-When a new version is available, a banner appears at the top of the app. Click it to download the new installer, run it over the existing installation, and you're done. Your data and settings are preserved.
+When a new version is available, a banner appears at the top of the app. Click it to open the download page, run the new installer over your existing installation, and you're done. Your data and settings are preserved.
 
 ## If Something Breaks
 
-Open the data folder above and check the file called `tracker.log` — it records what the app was doing when the problem occurred. If you can't figure it out from there, send the log file to Michael and he'll take a look.
+Open the data folder above and check the file called `tracker.log` — it records what the app was doing when the problem occurred. If you can't figure it out from there, send the log file to Michael.
+
+---
+<a href="https://www.flaticon.com/free-icons/container" title="container icons">Container icons created by Iconjam - Flaticon</a>

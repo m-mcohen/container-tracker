@@ -5,11 +5,12 @@
 #define AppExeName "ContainerTracker.exe"
 
 [Setup]
-AppId={{867023ab-b5bc-48d0-8093-961789d93187}
+AppId={{867023ab-b5bc-48d0-8093-961789d93187}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-AppURL=https://github.com/m-mcohen/container-tracker
+AppPublisherURL=https://github.com/m-mcohen/container-tracker
+AppUpdatesURL=https://github.com/m-mcohen/container-tracker/releases
 DefaultDirName={localappdata}\Programs\{#AppShortName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
