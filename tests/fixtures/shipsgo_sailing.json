@@ -1,0 +1,34 @@
+{
+  "message": "ok",
+  "shipment": {
+    "id": "ship_abc123",
+    "container_number": "MSKU1234567",
+    "status": "SAILING",
+    "carrier": {
+      "scac": "MAEU",
+      "name": "MAERSK LINE"
+    },
+    "route": {
+      "transit_percentage": 42,
+      "port_of_loading": {
+        "location": { "name": "Shanghai, China" },
+        "date_of_loading": "2026-04-01T10:00:00Z"
+      },
+      "port_of_discharge": {
+        "location": { "name": "Los Angeles, USA" },
+        "date_of_discharge": "2026-05-05T00:00:00Z",
+        "date_of_discharge_initial": "2026-05-01T00:00:00Z"
+      }
+    },
+    "containers": [
+      {
+        "number": "MSKU1234567",
+        "movements": [
+          { "vessel": null, "event": "GATE_IN" },
+          { "vessel": { "name": "MV SEA PIONEER", "imo": "9876543" }, "event": "LOAD" },
+          { "vessel": { "name": "MV SEA PIONEER", "imo": "9876543" }, "event": "DEPARTED" }
+        ]
+      }
+    ]
+  }
+}

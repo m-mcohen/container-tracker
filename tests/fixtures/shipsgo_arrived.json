@@ -1,0 +1,30 @@
+{
+  "message": "ok",
+  "shipment": {
+    "id": "ship_def456",
+    "container_number": "CMAU7654321",
+    "status": "ARRIVED",
+    "carrier": { "scac": "CMDU", "name": "CMA CGM" },
+    "route": {
+      "transit_percentage": 100,
+      "port_of_loading": {
+        "location": { "name": "Ningbo, China" },
+        "date_of_loading": "2026-02-14"
+      },
+      "port_of_discharge": {
+        "location": { "name": "Long Beach, USA" },
+        "date_of_discharge": "2026-03-20",
+        "date_of_discharge_initial": "2026-03-20"
+      }
+    },
+    "containers": [
+      {
+        "number": "CMAU7654321",
+        "movements": [
+          { "vessel": { "name": "MV PACIFIC STAR" }, "event": "LOAD" },
+          { "vessel": { "name": "MV PACIFIC STAR" }, "event": "DISCHARGED" }
+        ]
+      }
+    ]
+  }
+}
