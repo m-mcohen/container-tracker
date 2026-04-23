@@ -8,7 +8,13 @@ from __future__ import annotations
 
 from typing import Any, Final
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QPersistentModelIndex,
+    QSortFilterProxyModel,
+    Qt,
+)
 from PySide6.QtGui import QColor
 
 from container_tracker.core.status import StatusBucket, normalize_status
@@ -145,3 +151,51 @@ class ContainerTableModel(QAbstractTableModel):
             return f"{value}%"
 
         return "" if value is None else str(value)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Custom sort proxy — bucket priority on Status column
+# ─────────────────────────────────────────────────────────────────────────
+
+# Rank: lower = sorts first in ascending order.
+_BUCKET_RANK: Final[dict[str, int]] = {
+    "DELAYED": 0,
+    "SAILING": 1,
+    "ARRIVED": 2,
+    "PENDING": 3,
+    "UNKNOWN": 4,
+}
+
+
+class StatusBucketSortProxy(QSortFilterProxyModel):
+    """Sort proxy that orders the Status column by bucket priority.
+
+    Priority (ascending): DELAYED < SAILING < ARRIVED < PENDING < UNKNOWN.
+    Shipping operators care about what's late; alphabetical would hide that.
+    Other columns use default comparison.
+    """
+
+    def lessThan(
+        self,
+        source_left: QModelIndex | QPersistentModelIndex,
+        source_right: QModelIndex | QPersistentModelIndex,
+    ) -> bool:
+        if source_left.column() != _STATUS_COLUMN or source_right.column() != _STATUS_COLUMN:
+            return super().lessThan(source_left, source_right)
+
+        source = self.sourceModel()
+        if not isinstance(source, ContainerTableModel):
+            return super().lessThan(source_left, source_right)
+
+        left_rank = self._rank_for_row(source, source_left.row())
+        right_rank = self._rank_for_row(source, source_right.row())
+        return left_rank < right_rank
+
+    @staticmethod
+    def _rank_for_row(source: ContainerTableModel, row: int) -> int:
+        record = source.record_at(row) or {}
+        bucket = normalize_status(str(record.get("status", "")))
+        delay = record.get("delay_days_int")
+        if bucket == StatusBucket.SAILING and isinstance(delay, int) and delay > 0:
+            return _BUCKET_RANK["DELAYED"]
+        return _BUCKET_RANK[bucket.value]

@@ -155,3 +155,75 @@ class TestContainerTableModel:
             for r in range(model.rowCount())
         ]
         assert remaining == ["X000000000", "X000000002", "X000000004"]
+
+
+from PySide6.QtCore import QSortFilterProxyModel
+
+from container_tracker.ui.model import StatusBucketSortProxy
+
+
+class TestStatusBucketSortProxy:
+    def _populate(self) -> tuple[ContainerTableModel, StatusBucketSortProxy]:
+        model = ContainerTableModel()
+        model.set_records([
+            {"container_number": "A_SAILING_NO_DELAY",    "status": "SAILING",   "delay_days_int": 0},
+            {"container_number": "B_ARRIVED",             "status": "ARRIVED",   "delay_days_int": 0},
+            {"container_number": "C_SAILING_DELAYED",     "status": "SAILING",   "delay_days_int": 5},
+            {"container_number": "D_PENDING",             "status": "BOOKED",    "delay_days_int": 0},
+            {"container_number": "E_UNKNOWN",             "status": "ZZZZ",      "delay_days_int": 0},
+        ])
+        proxy = StatusBucketSortProxy()
+        proxy.setSourceModel(model)
+        return model, proxy
+
+    def test_sort_status_ascending_uses_bucket_priority(self, qapp) -> None:
+        _, proxy = self._populate()
+        proxy.sort(_STATUS_COLUMN_FOR_TEST, Qt.SortOrder.AscendingOrder)
+        # DELAYED → SAILING → ARRIVED → PENDING → UNKNOWN
+        ordered_containers = [
+            proxy.data(proxy.index(r, 0), Qt.ItemDataRole.DisplayRole)
+            for r in range(proxy.rowCount())
+        ]
+        assert ordered_containers == [
+            "C_SAILING_DELAYED",     # DELAYED (highest priority)
+            "A_SAILING_NO_DELAY",    # SAILING
+            "B_ARRIVED",             # ARRIVED
+            "D_PENDING",             # PENDING
+            "E_UNKNOWN",             # UNKNOWN
+        ]
+
+    def test_sort_status_descending_inverts_bucket_priority(self, qapp) -> None:
+        _, proxy = self._populate()
+        proxy.sort(_STATUS_COLUMN_FOR_TEST, Qt.SortOrder.DescendingOrder)
+        ordered_containers = [
+            proxy.data(proxy.index(r, 0), Qt.ItemDataRole.DisplayRole)
+            for r in range(proxy.rowCount())
+        ]
+        assert ordered_containers == [
+            "E_UNKNOWN",
+            "D_PENDING",
+            "B_ARRIVED",
+            "A_SAILING_NO_DELAY",
+            "C_SAILING_DELAYED",
+        ]
+
+    def test_sort_other_column_uses_default_comparison(self, qapp) -> None:
+        _, proxy = self._populate()
+        # Sort by Container # (column 0) — lexicographic on DisplayRole.
+        proxy.sort(0, Qt.SortOrder.AscendingOrder)
+        ordered_containers = [
+            proxy.data(proxy.index(r, 0), Qt.ItemDataRole.DisplayRole)
+            for r in range(proxy.rowCount())
+        ]
+        assert ordered_containers == sorted([
+            "A_SAILING_NO_DELAY",
+            "B_ARRIVED",
+            "C_SAILING_DELAYED",
+            "D_PENDING",
+            "E_UNKNOWN",
+        ])
+
+
+# Keep a module-local constant so the test file doesn't depend on importing
+# a private from model.py.
+_STATUS_COLUMN_FOR_TEST = 2
