@@ -110,8 +110,7 @@ class MainWindow(QMainWindow):
         root.addWidget(self._header)
 
         self._linked = LinkedSpreadsheetCard(str(self._config.get("excel_path", "") or ""))
-        # Phase 4: buttons are placeholders until Phase 5 wires them.
-        self._linked._browse_button.setEnabled(False)
+        self._linked.browse_requested.connect(self._on_browse)
         self._linked._create_button.setEnabled(False)
         # _open_button already disabled when path is empty; force disable regardless
         # until Phase 5 restores the dynamic enable/disable behavior.
@@ -221,7 +220,49 @@ class MainWindow(QMainWindow):
         self._stat_arrived.set_number(counts["arrived"])
         self._stat_delayed.set_number(counts["delayed"])
 
+    # ─── Helpers ──────────────────────────────────────────────────────
+
+    def _show_error_modal(self, title: str, message: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(title)
+        box.setText(message)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.exec()
+
     # ─── Slots ────────────────────────────────────────────────────────
+
+    def _on_browse(self) -> None:
+        """Open file dialog, validate, persist."""
+        from pathlib import Path
+
+        from PySide6.QtWidgets import QFileDialog
+
+        from container_tracker.core.excel import ExcelFormatError, read_container_list
+        from container_tracker.core.persistence import save_config
+
+        start_dir = str(self._config.get("excel_path") or Path.home())
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select container spreadsheet",
+            start_dir,
+            "Excel files (*.xlsx *.xlsm)",
+        )
+        if not path:
+            return  # user cancelled
+
+        # Validate by reading the container column.
+        try:
+            containers = read_container_list(Path(path))
+        except ExcelFormatError as exc:
+            self._show_error_modal("Can't read spreadsheet", str(exc))
+            return
+
+        self._config["excel_path"] = path
+        save_config(self._config)
+        self._linked.set_path(path)
+        logger.info("Linked spreadsheet: %s (%d containers detected)", path, len(containers))
 
     def _on_dark_mode_toggled(self, is_dark: bool) -> None:
         if is_dark != self._is_dark:
