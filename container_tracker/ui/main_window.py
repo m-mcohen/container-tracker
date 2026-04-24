@@ -112,9 +112,9 @@ class MainWindow(QMainWindow):
         self._linked = LinkedSpreadsheetCard(str(self._config.get("excel_path", "") or ""))
         self._linked.browse_requested.connect(self._on_browse)
         self._linked.create_requested.connect(self._on_create_template)
-        # _open_button already disabled when path is empty; force disable regardless
-        # until Phase 5 restores the dynamic enable/disable behavior.
-        self._linked._open_button.setEnabled(False)
+        self._linked.open_requested.connect(self._on_open_excel)
+        # Phase 5: ensure Open button reflects current path state (was force-disabled in Phase 4).
+        self._linked.set_path(str(self._config.get("excel_path", "") or ""))
         root.addWidget(self._linked)
 
         # Stat cards ---------------------------------------------------
@@ -263,6 +263,22 @@ class MainWindow(QMainWindow):
         save_config(self._config)
         self._linked.set_path(path)
         logger.info("Linked spreadsheet: %s (%d containers detected)", path, len(containers))
+
+    def _on_open_excel(self, path: str) -> None:
+        """Open the linked spreadsheet in the system default handler (Excel on Windows)."""
+        import os
+        import subprocess
+        import sys
+        try:
+            if sys.platform == "win32":
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+            logger.info("Opened %s in default handler", path)
+        except Exception as exc:
+            self._show_error_modal("Can't open spreadsheet", str(exc))
 
     def _on_create_template(self) -> None:
         """Pick save path, create template, persist."""
