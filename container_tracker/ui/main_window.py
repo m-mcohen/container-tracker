@@ -143,7 +143,7 @@ class MainWindow(QMainWindow):
 
         self._remove_button = QPushButton("Remove Selected")
         self._remove_button.setProperty("variant", "destructive")
-        self._remove_button.setEnabled(False)
+        self._remove_button.clicked.connect(self._on_remove_selected)
         action_layout.addWidget(self._refresh_button)
         action_layout.addWidget(self._remove_button)
         action_layout.addStretch(1)
@@ -339,6 +339,49 @@ class MainWindow(QMainWindow):
         save_config(self._config)
         self._linked.set_path(path)
         logger.info("Created template at %s and linked it", path)
+
+    def _on_remove_selected(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from container_tracker.core.persistence import save_tracking_data
+
+        selection = self._table.selectionModel().selectedRows()
+        if not selection:
+            self._show_error_modal("No selection", "Select one or more rows to remove.")
+            return
+
+        # Map proxy rows back to source rows, then to records.
+        source_rows: list[int] = []
+        container_numbers: list[str] = []
+        for proxy_index in selection:
+            source_index = self._proxy.mapToSource(proxy_index)
+            record = self._model.record_at(source_index.row())
+            if record is None:
+                continue
+            source_rows.append(source_index.row())
+            container_numbers.append(str(record.get("container_number", "")))
+
+        if not container_numbers:
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Remove from tracking",
+            f"Remove {len(container_numbers)} container(s) from tracking?\n\n"
+            + ", ".join(container_numbers),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        # Remove from tracking_db and model.
+        for cn in container_numbers:
+            self._tracking_db.pop(cn, None)
+        save_tracking_data(self._tracking_db)
+        self._model.remove_rows(source_rows)
+        self._refresh_stat_cards(self._tracking_db)
+        logger.info("Removed %d container(s): %s", len(container_numbers), container_numbers)
 
     def _on_add_track(self) -> None:
         from PySide6.QtCore import QThreadPool
