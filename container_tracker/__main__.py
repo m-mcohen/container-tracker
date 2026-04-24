@@ -100,10 +100,9 @@ def main() -> int:
         )
 
     from container_tracker.ui.main_window import MainWindow
-    window = MainWindow(config)
+    window = MainWindow(config, qt_handler)
     window.show()
 
-    _ = qt_handler  # connected in Phase 5
     return app.exec()
 
 

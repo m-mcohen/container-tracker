@@ -35,6 +35,7 @@ from container_tracker.ui.theme import apply_theme
 from container_tracker.ui.widgets import (
     HeaderRow,
     LinkedSpreadsheetCard,
+    QtLogHandler,
     StatCard,
     UpdateBanner,
 )
@@ -46,9 +47,10 @@ logger = logging.getLogger(__name__)
 class MainWindow(QMainWindow):
     """Main window. Owns config, is_dark, table model, and sub-widgets per spec §3.3."""
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any], qt_handler: QtLogHandler) -> None:
         super().__init__()
         self._config = config
+        self._qt_handler = qt_handler
         self._is_dark: bool = bool(config.get("dark_mode", False))
 
         self.setWindowTitle(f"Container Tracker v{__version__}")
@@ -185,6 +187,7 @@ class MainWindow(QMainWindow):
         self._activity_log.setReadOnly(True)
         self._activity_log.setMaximumHeight(140)
         self._activity_log.setPlaceholderText("Activity log (refresh, add, remove will print here)…")
+        self._qt_handler.log_emitted.connect(self._activity_log.appendPlainText)
         root.addWidget(self._activity_log)
 
         # Footer -------------------------------------------------------
