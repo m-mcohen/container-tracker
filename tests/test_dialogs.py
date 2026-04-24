@@ -71,3 +71,93 @@ class TestSetupDialogSkeleton:
     def test_invalid_mode_raises(self, qapp) -> None:
         with pytest.raises(ValueError):
             SetupDialog(mode="bogus")  # type: ignore[arg-type]
+
+
+class TestSetupDialogValidation:
+    def test_save_enables_when_all_valid(self, qapp) -> None:
+        dlg = SetupDialog(mode="welcome")
+        dlg._company_input.setText("Acme")
+        dlg._api_key_input.setText("12345678-1234-1234-1234-123456789012")
+        dlg._email_input.setText("ops@acme.test")
+        # Simulate Qt text-changed firing.
+        dlg._revalidate()
+        assert dlg._save_button.isEnabled() is True
+
+    def test_save_disabled_when_company_missing(self, qapp) -> None:
+        dlg = SetupDialog(mode="welcome")
+        dlg._api_key_input.setText("12345678-1234-1234-1234-123456789012")
+        dlg._email_input.setText("ops@acme.test")
+        dlg._revalidate()
+        assert dlg._save_button.isEnabled() is False
+
+    def test_error_label_hidden_until_touched(self, qapp) -> None:
+        dlg = SetupDialog(mode="welcome")
+        dlg.show()  # required for isVisible() to return True on descendants
+        try:
+            # Untouched — hidden.
+            assert dlg._company_error.isHidden()
+            # Touch + revalidate.
+            dlg._mark_touched("company")
+            dlg._revalidate()
+            assert dlg._company_error.isVisible() is True
+        finally:
+            dlg.close()
+
+    def test_error_label_shows_message_for_invalid_api_key(self, qapp) -> None:
+        dlg = SetupDialog(mode="welcome")
+        dlg._api_key_input.setText("too-short")
+        dlg._mark_touched("api_key")
+        dlg._revalidate()
+        assert "doesn't look right" in dlg._api_key_error.text().lower()
+
+    def test_error_label_hides_when_field_corrected(self, qapp) -> None:
+        dlg = SetupDialog(mode="welcome")
+        dlg.show()  # required for isVisible() to return True
+        try:
+            dlg._api_key_input.setText("bad")
+            dlg._mark_touched("api_key")
+            dlg._revalidate()
+            assert dlg._api_key_error.isVisible() is True
+            dlg._api_key_input.setText("12345678-1234-1234-1234-123456789012")
+            dlg._revalidate()
+            assert dlg._api_key_error.isHidden()
+        finally:
+            dlg.close()
+
+    def test_settings_mode_empty_api_key_valid_when_key_already_set(self, qapp) -> None:
+        dlg = SetupDialog(
+            mode="settings",
+            initial_company="Acme",
+            initial_email="ops@acme.test",
+            initial_api_key_set=True,
+        )
+        # All fields pre-populated (API key left empty since it's set).
+        dlg._revalidate()
+        assert dlg._save_button.isEnabled() is True
+
+    def test_settings_mode_empty_api_key_invalid_when_key_not_set(self, qapp) -> None:
+        dlg = SetupDialog(
+            mode="settings",
+            initial_company="Acme",
+            initial_email="ops@acme.test",
+            initial_api_key_set=False,
+        )
+        dlg._revalidate()
+        assert dlg._save_button.isEnabled() is False
+
+    def test_settings_mode_replacing_api_key_validates_new_value(self, qapp) -> None:
+        dlg = SetupDialog(
+            mode="settings",
+            initial_company="Acme",
+            initial_email="ops@acme.test",
+            initial_api_key_set=True,
+        )
+        dlg.show()  # required for isVisible() to return True
+        try:
+            dlg._api_key_input.setText("too-short")
+            dlg._mark_touched("api_key")
+            dlg._revalidate()
+            assert dlg._save_button.isEnabled() is False
+            assert dlg._api_key_error.isVisible() is True
+        finally:
+            dlg.close()

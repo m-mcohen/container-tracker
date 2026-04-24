@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from container_tracker.ui.validation import validate_setup_fields
+
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,13 @@ class SetupDialog(QDialog):
         self._email_input = QLineEdit(initial_email)
         self._email_input.setPlaceholderText("contact@yourcompany.com")
         self._email_error = self._make_error_label()
+
+        self._touched: set[str] = set()
+
+        # Wire live validation.
+        self._company_input.textChanged.connect(lambda: self._on_changed("company"))
+        self._api_key_input.textChanged.connect(lambda: self._on_changed("api_key"))
+        self._email_input.textChanged.connect(lambda: self._on_changed("email"))
 
         # ─── Save / Cancel buttons ──────────────────────────────────
         self._save_button = QPushButton("Save")
@@ -190,6 +199,49 @@ class SetupDialog(QDialog):
         layout.addWidget(self._api_key_hint)
         layout.addWidget(self._api_key_error)
         return container
+
+    # ─── Validation ──────────────────────────────────────────────────
+
+    def _on_changed(self, field: str) -> None:
+        self._touched.add(field)
+        self._revalidate()
+
+    def _mark_touched(self, field: str) -> None:
+        """Test helper: mark a field as touched without relying on textChanged."""
+        self._touched.add(field)
+
+    def _revalidate(self) -> None:
+        company = self._company_input.text()
+        email = self._email_input.text()
+        api_key_text = self._api_key_input.text()
+
+        # Settings-mode keep-current rule: empty api_key is valid iff
+        # initial_api_key_set is True.
+        effective_api_key = api_key_text
+        if self._mode == "settings" and self._initial_api_key_set and not api_key_text.strip():
+            # Sentinel must be a valid API_KEY_PATTERN match (30-40 chars, [0-9a-fA-F-]).
+            effective_api_key = "a" * 36
+
+        errors = validate_setup_fields(company=company, api_key=effective_api_key, email=email)
+        # If we substituted the sentinel, clear any api_key error it might have caused
+        # (it shouldn't since the sentinel is valid, but be defensive).
+
+        self._apply_errors(errors)
+        self._save_button.setEnabled(not errors)
+
+    def _apply_errors(self, errors: dict[str, str]) -> None:
+        for key, label in (
+            ("company", self._company_error),
+            ("api_key", self._api_key_error),
+            ("email", self._email_error),
+        ):
+            message = errors.get(key, "")
+            if message and key in self._touched:
+                label.setText(message)
+                label.show()
+            else:
+                label.clear()
+                label.hide()
 
     # ─── Qt lifecycle ─────────────────────────────────────────────────
 
