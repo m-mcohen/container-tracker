@@ -210,8 +210,44 @@ class MainWindow(QMainWindow):
             self.toggle_dark_mode()
 
     def _on_settings_clicked(self) -> None:
-        # Settings dialog is Phase 4 territory. Log for now.
-        logger.info("Settings gear clicked (Phase 4 will open SetupDialog)")
+        """Open Settings dialog; on Save, persist to config + keyring and refresh."""
+        from container_tracker.__version__ import __version__ as app_version
+        from container_tracker.core.persistence import (
+            data_dir,
+            get_api_token,
+            save_config,
+            set_api_token,
+        )
+        from container_tracker.ui.dialogs import SetupDialog
+
+        dialog = SetupDialog(
+            mode="settings",
+            initial_company=str(self._config.get("company_name", "") or ""),
+            initial_email=str(self._config.get("contact_email", "") or ""),
+            initial_api_key_set=bool(get_api_token()),
+            app_version=app_version,
+            data_folder=str(data_dir()),
+        )
+        result = dialog.exec()
+        if result != dialog.DialogCode.Accepted:
+            logger.info("Settings dialog cancelled")
+            return
+        values = dialog.get_values()
+        self._config["company_name"] = values["company"] or ""
+        self._config["contact_email"] = values["email"] or ""
+        save_config(self._config)
+        # api_key contract: None means "keep current keyring entry" (user left the
+        # field empty in settings mode). It does NOT mean "clear the key." A real
+        # empty-string from the dialog would only reach this branch if the user
+        # is in welcome mode or typed and deleted content — both caught by the
+        # dialog's validation before accept. Never call set_api_token("") here.
+        if values["api_key"] is not None:
+            set_api_token(values["api_key"])
+        logger.info(
+            "Settings saved: company=%r, email=%r, api-key-updated=%s",
+            values["company"], values["email"], values["api_key"] is not None,
+        )
+        self.refresh_from_config()  # type: ignore[attr-defined]
 
     # ─── Qt lifecycle ─────────────────────────────────────────────────
 
