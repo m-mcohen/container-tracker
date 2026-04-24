@@ -1,6 +1,6 @@
 #define AppName "Container Tracker"
 #define AppShortName "ContainerTracker"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppPublisher "Michael Cohen"
 #define AppExeName "ContainerTracker.exe"
 
@@ -34,6 +34,7 @@ Name: "startupicon"; Description: "Start automatically when Windows starts"; Gro
 [Files]
 Source: "dist\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README_CLIENT.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
+Source: "ATTRIBUTIONS.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
