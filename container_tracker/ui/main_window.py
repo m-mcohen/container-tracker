@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
 
         self._linked = LinkedSpreadsheetCard(str(self._config.get("excel_path", "") or ""))
         self._linked.browse_requested.connect(self._on_browse)
-        self._linked._create_button.setEnabled(False)
+        self._linked.create_requested.connect(self._on_create_template)
         # _open_button already disabled when path is empty; force disable regardless
         # until Phase 5 restores the dynamic enable/disable behavior.
         self._linked._open_button.setEnabled(False)
@@ -263,6 +263,35 @@ class MainWindow(QMainWindow):
         save_config(self._config)
         self._linked.set_path(path)
         logger.info("Linked spreadsheet: %s (%d containers detected)", path, len(containers))
+
+    def _on_create_template(self) -> None:
+        """Pick save path, create template, persist."""
+        from pathlib import Path
+
+        from PySide6.QtWidgets import QFileDialog
+
+        from container_tracker.core.excel import create_template
+        from container_tracker.core.persistence import save_config
+
+        start_path = str(Path.home() / "container_tracking.xlsx")
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create template spreadsheet",
+            start_path,
+            "Excel files (*.xlsx)",
+        )
+        if not path:
+            return
+        try:
+            create_template(Path(path))
+        except Exception as exc:
+            self._show_error_modal("Can't create template", str(exc))
+            return
+
+        self._config["excel_path"] = path
+        save_config(self._config)
+        self._linked.set_path(path)
+        logger.info("Created template at %s and linked it", path)
 
     def _on_dark_mode_toggled(self, is_dark: bool) -> None:
         if is_dark != self._is_dark:
