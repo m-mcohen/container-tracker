@@ -30,6 +30,7 @@ from container_tracker.__version__ import __version__
 from container_tracker.core.api import CARRIER_NAMES, ShipsGoAuthError, ShipsGoClient
 from container_tracker.core.persistence import load_tracking_data
 from container_tracker.core.status import bucket_counts
+from container_tracker.core.updates import UpdateInfo
 from container_tracker.ui.model import ContainerTableModel, StatusBucketSortProxy
 from container_tracker.ui.theme import apply_theme
 from container_tracker.ui.widgets import (
@@ -99,6 +100,9 @@ class MainWindow(QMainWindow):
         root.setSpacing(16)
 
         self._banner = UpdateBanner()
+        self._banner.dismissed.connect(self._on_banner_dismissed)
+        self._banner.open_url_requested.connect(self._on_banner_open_url)
+        self._update_check_dispatched = False  # prevents re-dispatch on repeated showEvents
         root.addWidget(self._banner)
 
         self._header = HeaderRow(
@@ -544,7 +548,34 @@ class MainWindow(QMainWindow):
     def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         logger.info("MainWindow shown")
         super().showEvent(event)
+        if not self._update_check_dispatched:
+            self._update_check_dispatched = True
+            self._dispatch_update_check()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("MainWindow closing")
         super().closeEvent(event)
+
+    # ─── Update check ─────────────────────────────────────────────────
+
+    def _dispatch_update_check(self) -> None:
+        from PySide6.QtCore import QThreadPool
+
+        from container_tracker.ui.runnables import UpdateCheckRunnable
+
+        runnable = UpdateCheckRunnable(current_version=__version__)
+        runnable.signals.update_available.connect(self._on_update_available)
+        QThreadPool.globalInstance().start(runnable)
+
+    def _on_update_available(self, info: UpdateInfo) -> None:
+        logger.info("Update available: v%s at %s", info.version, info.html_url)
+        self._banner.show_update(info.version, info.html_url)
+
+    def _on_banner_dismissed(self) -> None:
+        # Session-only dismissal — no config change.
+        logger.info("Update banner dismissed for this session")
+
+    def _on_banner_open_url(self, url: str) -> None:
+        import webbrowser
+        logger.info("Opening release URL: %s", url)
+        webbrowser.open(url)
