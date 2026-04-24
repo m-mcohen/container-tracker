@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from container_tracker.__version__ import __version__
-from container_tracker.core.api import CARRIER_NAMES
+from container_tracker.core.api import CARRIER_NAMES, ShipsGoAuthError, ShipsGoClient
 from container_tracker.core.persistence import load_tracking_data
 from container_tracker.core.status import bucket_counts
 from container_tracker.ui.model import ContainerTableModel, StatusBucketSortProxy
@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
         self._qt_handler = qt_handler
         self._is_dark: bool = bool(config.get("dark_mode", False))
         self._tracking_db: dict[str, dict[str, Any]] = {}
+        self._client: ShipsGoClient | None = None
 
         self.setWindowTitle(f"Container Tracker v{__version__}")
         self.resize(QSize(1100, 720))
@@ -138,7 +139,7 @@ class MainWindow(QMainWindow):
 
         self._refresh_button = QPushButton("Refresh All ETAs && Update Excel")  # && escapes for button mnemonic
         self._refresh_button.setProperty("variant", "primary")
-        self._refresh_button.setEnabled(False)
+        self._refresh_button.clicked.connect(self._on_refresh)
 
         self._remove_button = QPushButton("Remove Selected")
         self._remove_button.setProperty("variant", "destructive")
@@ -231,6 +232,36 @@ class MainWindow(QMainWindow):
         box.setStandardButtons(QMessageBox.StandardButton.Ok)
         box.exec()
 
+    def _show_auth_error_modal(self) -> None:
+        """401 from ShipsGo — prompt user to open Settings."""
+        from PySide6.QtWidgets import QMessageBox
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("API key invalid")
+        box.setText(
+            "Your ShipsGo API key is invalid. Open Settings to update it."
+        )
+        open_settings = box.addButton("Open Settings…", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is open_settings:
+            self._on_settings_clicked()
+
+    def _ensure_client(self) -> ShipsGoClient | None:
+        """Lazy-construct a ShipsGoClient using the current keyring token.
+
+        Returns None if no token is set (in which case the auth-error modal is shown).
+        """
+        from container_tracker.core.persistence import get_api_token
+        token = get_api_token()
+        if not token:
+            self._show_auth_error_modal()
+            return None
+        if self._client is None or getattr(self._client, "_last_token", None) != token:
+            self._client = ShipsGoClient(token)
+            self._client._last_token = token  # type: ignore[attr-defined]
+        return self._client
+
     # ─── Slots ────────────────────────────────────────────────────────
 
     def _on_browse(self) -> None:
@@ -308,6 +339,53 @@ class MainWindow(QMainWindow):
         save_config(self._config)
         self._linked.set_path(path)
         logger.info("Created template at %s and linked it", path)
+
+    def _on_refresh(self) -> None:
+        from pathlib import Path
+
+        from PySide6.QtCore import QThreadPool
+
+        from container_tracker.core.excel import ExcelFormatError, write_tracking_report
+        from container_tracker.core.persistence import save_tracking_data
+        from container_tracker.ui.runnables import RefreshRunnable
+
+        client = self._ensure_client()
+        if client is None:
+            return
+
+        self._refresh_button.setEnabled(False)
+
+        runnable = RefreshRunnable(client, dict(self._tracking_db))
+
+        def on_completed(new_db: dict[str, dict[str, Any]]) -> None:
+            self._tracking_db = new_db
+            save_tracking_data(new_db)
+            self._model.set_records(list(new_db.values()))
+            self._refresh_stat_cards(new_db)
+            # Also write to linked Excel if a path is configured.
+            excel_path = self._config.get("excel_path", "")
+            if excel_path:
+                try:
+                    count = write_tracking_report(Path(excel_path), new_db)
+                    logger.info("Excel updated: %d rows", count)
+                except ExcelFormatError as exc:
+                    self._show_error_modal("Can't update spreadsheet", str(exc))
+                except Exception as exc:
+                    logger.info("Excel update failed: %s", exc)
+            self._refresh_button.setEnabled(True)
+
+        def on_failed(msg: str) -> None:
+            self._show_error_modal("Refresh failed", msg)
+            self._refresh_button.setEnabled(True)
+
+        def on_auth() -> None:
+            self._show_auth_error_modal()
+            self._refresh_button.setEnabled(True)
+
+        runnable.signals.completed.connect(on_completed)
+        runnable.signals.failed.connect(on_failed)
+        runnable.signals.auth_error.connect(on_auth)
+        QThreadPool.globalInstance().start(runnable)
 
     def _on_dark_mode_toggled(self, is_dark: bool) -> None:
         if is_dark != self._is_dark:
