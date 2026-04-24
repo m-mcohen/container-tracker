@@ -28,9 +28,9 @@ from PySide6.QtWidgets import (
 
 from container_tracker.__version__ import __version__
 from container_tracker.core.api import CARRIER_NAMES
+from container_tracker.core.persistence import load_tracking_data
 from container_tracker.core.status import bucket_counts
 from container_tracker.ui.model import ContainerTableModel, StatusBucketSortProxy
-from container_tracker.ui.sample_data import sample_tracking_db
 from container_tracker.ui.theme import apply_theme
 from container_tracker.ui.widgets import (
     HeaderRow,
@@ -52,12 +52,13 @@ class MainWindow(QMainWindow):
         self._config = config
         self._qt_handler = qt_handler
         self._is_dark: bool = bool(config.get("dark_mode", False))
+        self._tracking_db: dict[str, dict[str, Any]] = {}
 
         self.setWindowTitle(f"Container Tracker v{__version__}")
         self.resize(QSize(1100, 720))
 
         self._build_layout()
-        self._populate_sample_data()
+        self._populate_data()
         self._table.resizeColumnsToContents()
 
         logger.info("MainWindow constructed (is_dark=%s)", self._is_dark)
@@ -205,12 +206,13 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central)
 
-    def _populate_sample_data(self) -> None:
-        """Phase 3: load hardcoded sample data. Phase 5 replaces with real data."""
-        db = sample_tracking_db()
+    def _populate_data(self) -> None:
+        """Load tracking data from disk and render into model + stat cards."""
+        db = load_tracking_data()
+        self._tracking_db = db
         self._model.set_records(list(db.values()))
         self._refresh_stat_cards(db)
-        logger.info("Loaded sample data: %d containers", len(db))
+        logger.info("Loaded tracking data: %d containers", len(db))
 
     def _refresh_stat_cards(self, db: dict[str, dict[str, Any]]) -> None:
         counts = bucket_counts(db)
