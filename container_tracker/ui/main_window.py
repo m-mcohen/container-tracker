@@ -73,6 +73,19 @@ class MainWindow(QMainWindow):
         self._config["dark_mode"] = self._is_dark
         logger.info("dark mode toggled → %s", self._is_dark)
 
+    def refresh_from_config(self) -> None:
+        """Re-read config and update header + linked-spreadsheet card.
+
+        Called after the Settings dialog saves changes. Only updates the
+        widgets whose values can change via Settings: company_name (header
+        subtitle) and excel_path (linked-spreadsheet path display).
+        """
+        company = str(self._config.get("company_name", "") or "")
+        self._header.set_subtitle(company or "Unconfigured — open Settings")
+        excel_path = str(self._config.get("excel_path", "") or "")
+        self._linked.set_path(excel_path)
+        logger.info("refresh_from_config applied: company=%r, excel=%r", company, excel_path)
+
     # ─── Layout composition ───────────────────────────────────────────
 
     def _build_layout(self) -> None:
@@ -247,7 +260,7 @@ class MainWindow(QMainWindow):
             "Settings saved: company=%r, email=%r, api-key-updated=%s",
             values["company"], values["email"], values["api_key"] is not None,
         )
-        self.refresh_from_config()  # type: ignore[attr-defined]
+        self.refresh_from_config()
 
     # ─── Qt lifecycle ─────────────────────────────────────────────────
 
