@@ -2,25 +2,18 @@
 setlocal
 
 echo ============================================
-echo  Building Container Tracker
+echo  Building Container Tracker v1.1.0
 echo ============================================
 
 echo [1/3] Installing dependencies...
-pip install requests openpyxl customtkinter pillow pyinstaller keyring packaging --quiet
+pip install PySide6 requests openpyxl keyring packaging pyinstaller --quiet
 if %errorlevel% neq 0 ( echo ERROR: pip install failed. & exit /b 1 )
 
 echo [2/3] Compiling ContainerTracker.exe...
 pyinstaller ^
     --noconfirm ^
-    --onefile ^
-    --windowed ^
-    --name "ContainerTracker" ^
-    --icon app.ico ^
-    --add-data "app.ico;." ^
-    --collect-all customtkinter ^
-    --collect-all keyring ^
-    --distpath "dist" ^
-    container_tracker_gui.py
+    --clean ^
+    ContainerTracker.spec
 
 if %errorlevel% neq 0 ( echo ERROR: PyInstaller build failed. & exit /b 1 )
 
