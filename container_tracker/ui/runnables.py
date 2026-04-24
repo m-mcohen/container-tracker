@@ -18,6 +18,7 @@ from container_tracker.core.api import (
     ShipsGoClient,
     extract_fields,
 )
+from container_tracker.core.updates import UpdateInfo, check_for_update
 
 
 logger = logging.getLogger(__name__)
@@ -181,3 +182,33 @@ class AddTrackRunnable(QRunnable):
         except Exception as exc:
             logger.info("Add failed: %s", exc)
             self.signals.failed.emit(str(exc))
+
+
+# --- Update check ------------------------------------------------------
+
+class UpdateCheckSignals(QObject):
+    update_available = Signal(UpdateInfo)
+
+
+class UpdateCheckRunnable(QRunnable):
+    """Run the GitHub releases check off the UI thread.
+
+    Emits `update_available` only when a newer release is found. All failures
+    (network error, malformed response, no tag, current-or-older version) log
+    a line via core.updates and emit nothing — per spec §6 "fail silently."
+    """
+
+    def __init__(self, current_version: str, timeout: float = 5.0) -> None:
+        super().__init__()
+        self.signals = UpdateCheckSignals()
+        self._current_version = current_version
+        self._timeout = timeout
+
+    def run(self) -> None:
+        try:
+            result = check_for_update(self._current_version, timeout=self._timeout)
+        except Exception as exc:  # defensive: core.updates swallows, but belt-and-suspenders
+            logger.info("update check raised unexpectedly: %s", exc)
+            return
+        if result is not None:
+            self.signals.update_available.emit(result)

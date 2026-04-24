@@ -7,9 +7,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from container_tracker.core.api import ShipsGoAuthError
+from container_tracker.core.updates import UpdateInfo
 from container_tracker.ui.runnables import (
     AddTrackRunnable,
     RefreshRunnable,
+    UpdateCheckRunnable,
 )
 
 
@@ -131,3 +133,39 @@ class TestAddTrackRunnable:
         runnable.signals.auth_error.connect(lambda: auth.append(True))
         runnable.run()
         assert auth == [True]
+
+
+class TestUpdateCheckRunnable:
+    def test_newer_release_emits_update_available(self, qapp, monkeypatch) -> None:
+        fake = UpdateInfo(version="1.2.0", html_url="https://github.com/m-mcohen/container-tracker/releases/v1.2.0")
+        monkeypatch.setattr(
+            "container_tracker.ui.runnables.check_for_update",
+            lambda current_version, timeout=5.0: fake,
+        )
+        runnable = UpdateCheckRunnable(current_version="1.1.0")
+        received: list[UpdateInfo] = []
+        runnable.signals.update_available.connect(received.append)
+        runnable.run()
+        assert received == [fake]
+
+    def test_no_update_emits_nothing(self, qapp, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "container_tracker.ui.runnables.check_for_update",
+            lambda current_version, timeout=5.0: None,
+        )
+        runnable = UpdateCheckRunnable(current_version="1.1.0")
+        received: list[UpdateInfo] = []
+        runnable.signals.update_available.connect(received.append)
+        runnable.run()
+        assert received == []
+
+    def test_exception_fails_silently(self, qapp, monkeypatch) -> None:
+        def boom(current_version: str, timeout: float = 5.0) -> None:
+            raise RuntimeError("network dead")
+        monkeypatch.setattr("container_tracker.ui.runnables.check_for_update", boom)
+        runnable = UpdateCheckRunnable(current_version="1.1.0")
+        received: list[UpdateInfo] = []
+        runnable.signals.update_available.connect(received.append)
+        # Must NOT raise; must NOT emit.
+        runnable.run()
+        assert received == []
