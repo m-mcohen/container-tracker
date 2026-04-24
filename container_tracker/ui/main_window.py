@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
         self._carrier_combo.addItems(CARRIER_NAMES)
         self._add_button = QPushButton("Add && Track")
         self._add_button.setProperty("variant", "primary")
-        self._add_button.setEnabled(False)
+        self._add_button.clicked.connect(self._on_add_track)
         action_layout.addWidget(self._add_input)
         action_layout.addWidget(self._carrier_combo)
         action_layout.addWidget(self._add_button)
@@ -339,6 +339,71 @@ class MainWindow(QMainWindow):
         save_config(self._config)
         self._linked.set_path(path)
         logger.info("Created template at %s and linked it", path)
+
+    def _on_add_track(self) -> None:
+        from PySide6.QtCore import QThreadPool
+
+        from container_tracker.core.api import resolve_scac
+        from container_tracker.core.persistence import save_tracking_data
+        from container_tracker.ui.runnables import AddTrackRunnable
+
+        text = self._add_input.text().strip().upper()
+        if len(text) < 10:
+            self._show_error_modal(
+                "Invalid container number",
+                "Container numbers should be at least 10 characters.",
+            )
+            return
+        carrier_name = self._carrier_combo.currentText()
+        scac = resolve_scac(carrier_name)
+
+        client = self._ensure_client()
+        if client is None:
+            return
+
+        self._add_button.setEnabled(False)
+
+        runnable = AddTrackRunnable(client, text, scac)
+
+        def on_completed(record: dict[str, Any]) -> None:
+            cn = record.get("container_number", "").upper()
+            if cn:
+                self._tracking_db[cn] = record
+                save_tracking_data(self._tracking_db)
+                self._model.set_records(list(self._tracking_db.values()))
+                self._refresh_stat_cards(self._tracking_db)
+                logger.info("Added %s to tracking", cn)
+            self._add_input.clear()
+            self._add_button.setEnabled(True)
+
+        def on_already_tracked(cn: str) -> None:
+            self._show_error_modal(
+                "Already tracked",
+                f"{cn} is already in your tracking list. Use Refresh to update it.",
+            )
+            self._add_button.setEnabled(True)
+
+        def on_no_credits() -> None:
+            self._show_error_modal(
+                "Not enough credits",
+                "ShipsGo reports you don't have enough credits to track a new container. Visit shipsgo.com to top up.",
+            )
+            self._add_button.setEnabled(True)
+
+        def on_auth() -> None:
+            self._show_auth_error_modal()
+            self._add_button.setEnabled(True)
+
+        def on_failed(msg: str) -> None:
+            self._show_error_modal("Add failed", msg)
+            self._add_button.setEnabled(True)
+
+        runnable.signals.completed.connect(on_completed)
+        runnable.signals.already_tracked.connect(on_already_tracked)
+        runnable.signals.no_credits.connect(on_no_credits)
+        runnable.signals.auth_error.connect(on_auth)
+        runnable.signals.failed.connect(on_failed)
+        QThreadPool.globalInstance().start(runnable)
 
     def _on_refresh(self) -> None:
         from pathlib import Path
