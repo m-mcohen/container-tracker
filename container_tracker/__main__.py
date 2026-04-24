@@ -68,18 +68,42 @@ def main() -> int:
         config.get("excel_path"),
         config.get("dark_mode"),
     )
-    logger.info("first-run=%s, api-token-present=%s", is_first_run(config), bool(get_api_token()))
 
-    # Apply the theme BEFORE constructing any widgets so they inherit from
-    # the application-level stylesheet on first paint (no un-styled flash).
+    # Apply the theme BEFORE any widget is constructed so dialogs inherit it.
     from container_tracker.ui.theme import apply_theme
     apply_theme(is_dark=bool(config.get("dark_mode", False)))
+
+    first_run = is_first_run(config)
+    api_token_present = bool(get_api_token())
+    logger.info("first-run=%s, api-token-present=%s", first_run, api_token_present)
+
+    if first_run:
+        logger.info("First run — showing Welcome dialog")
+        from container_tracker.core.persistence import save_config, set_api_token
+        from container_tracker.ui.dialogs import SetupDialog
+        dialog = SetupDialog(mode="welcome")
+        result = dialog.exec()
+        if result != dialog.DialogCode.Accepted:
+            # User closed via × (which triggered QApplication.quit via closeEvent)
+            # or some other reject path. Either way, don't show the main window.
+            logger.info("user cancelled first-run setup; exiting")
+            return 0
+        values = dialog.get_values()
+        config["company_name"] = values["company"] or ""
+        config["contact_email"] = values["email"] or ""
+        save_config(config)
+        if values["api_key"]:
+            set_api_token(values["api_key"])
+        logger.info(
+            "Welcome-save complete: company=%r, email=%r, api-token-present=%s",
+            values["company"], values["email"], bool(values["api_key"]),
+        )
 
     from container_tracker.ui.main_window import MainWindow
     window = MainWindow(config)
     window.show()
 
-    _ = qt_handler  # will be connected to ActivityLog in Phase 3
+    _ = qt_handler  # connected in Phase 5
     return app.exec()
 
 
