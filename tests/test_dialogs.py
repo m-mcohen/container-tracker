@@ -161,3 +161,47 @@ class TestSetupDialogValidation:
             assert dlg._api_key_error.isVisible() is True
         finally:
             dlg.close()
+
+
+class TestSetupDialogValues:
+    def test_get_values_returns_typed_dict(self, qapp) -> None:
+        dlg = SetupDialog(mode="welcome")
+        dlg._company_input.setText("Acme")
+        dlg._api_key_input.setText("12345678-1234-1234-1234-123456789012")
+        dlg._email_input.setText("ops@acme.test")
+        values = dlg.get_values()
+        assert values["company"] == "Acme"
+        assert values["email"] == "ops@acme.test"
+        assert values["api_key"] == "12345678-1234-1234-1234-123456789012"
+
+    def test_get_values_strips_whitespace(self, qapp) -> None:
+        dlg = SetupDialog(mode="welcome")
+        dlg._company_input.setText("  Acme  ")
+        dlg._api_key_input.setText("  12345678-1234-1234-1234-123456789012  ")
+        dlg._email_input.setText("  ops@acme.test  ")
+        values = dlg.get_values()
+        assert values["company"] == "Acme"
+        assert values["api_key"] == "12345678-1234-1234-1234-123456789012"
+        assert values["email"] == "ops@acme.test"
+
+    def test_settings_mode_returns_none_api_key_when_field_empty(self, qapp) -> None:
+        """Empty api_key field in settings mode means 'keep current'."""
+        dlg = SetupDialog(
+            mode="settings",
+            initial_company="Acme",
+            initial_email="ops@acme.test",
+            initial_api_key_set=True,
+        )
+        values = dlg.get_values()
+        assert values["api_key"] is None
+
+    def test_settings_mode_returns_new_api_key_when_field_set(self, qapp) -> None:
+        dlg = SetupDialog(
+            mode="settings",
+            initial_company="Acme",
+            initial_email="ops@acme.test",
+            initial_api_key_set=True,
+        )
+        dlg._api_key_input.setText("12345678-1234-1234-1234-123456789012")
+        values = dlg.get_values()
+        assert values["api_key"] == "12345678-1234-1234-1234-123456789012"

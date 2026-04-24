@@ -243,6 +243,33 @@ class SetupDialog(QDialog):
                 label.clear()
                 label.hide()
 
+    def get_values(self) -> dict[str, str | None]:
+        """Return validated field values.
+
+        Returns a dict with keys 'company', 'email' (both str), and 'api_key'
+        (str OR None). api_key is None in settings mode when the user left the
+        field empty — meaning "keep the currently-stored key unchanged." In
+        welcome mode, or when the field has any value, api_key is the string.
+
+        Contract for callers: api_key is None means "skip set_api_token() — keep
+        the existing keyring entry as-is." It does NOT mean "clear the key."
+        Callers MUST never interpret None as a request to delete/blank the key;
+        the dialog's validation guarantees that None only occurs in settings
+        mode when initial_api_key_set was True and the user left the field
+        empty (the explicit "keep current" path).
+        """
+        company = self._company_input.text().strip()
+        email = self._email_input.text().strip()
+        api_key_text = self._api_key_input.text().strip()
+
+        api_key: str | None
+        if self._mode == "settings" and self._initial_api_key_set and not api_key_text:
+            api_key = None
+        else:
+            api_key = api_key_text
+
+        return {"company": company, "email": email, "api_key": api_key}
+
     # ─── Qt lifecycle ─────────────────────────────────────────────────
 
     def closeEvent(self, event: QCloseEvent) -> None:
