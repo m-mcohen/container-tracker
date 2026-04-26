@@ -73,6 +73,42 @@ def mock_keyring(monkeypatch):
 
 
 @pytest.fixture
+def sample_tracking_db(isolated_data_dir):
+    """Factory: write a tracking_data.json into the isolated data dir and
+    return the loaded dict. Used by bridge tests that need realistic
+    on-disk records.
+
+    Default record is one fully-refreshed entry sourced from the
+    sanitized shipsgo_response.json fixture: extract_fields() runs on
+    the payload and the result is merged into the record (mirrors the
+    legacy GUI's ``rec.update(extract_fields(sh))`` write path)."""
+    import json
+    from container_tracker.core import config as ct_config
+    from container_tracker.core.status import extract_fields
+
+    fixtures = Path(__file__).parent / "fixtures"
+
+    def make(records: dict | None = None) -> dict:
+        if records is None:
+            shipment = json.loads((fixtures / "shipsgo_response.json").read_text())
+            inner = shipment["shipment"]
+            extracted = extract_fields(shipment)
+            cn = inner["container_number"].upper()
+            records = {
+                cn: {
+                    "container_number": cn,
+                    "shipment_id": inner["id"],
+                    "last_refreshed": "2026-04-25 10:00 AM EST",
+                    **extracted,
+                }
+            }
+        ct_config.TRACKING_DB_FILE.write_text(json.dumps(records, default=str))
+        return records
+
+    return make
+
+
+@pytest.fixture
 def sample_workbook(tmp_path) -> Callable[..., Path]:
     """Factory: returns a callable ``make(headers=..., rows=...)`` that writes a
     1-sheet xlsx into tmp_path and returns its Path. Default headers expose

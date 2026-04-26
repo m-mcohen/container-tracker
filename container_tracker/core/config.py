@@ -128,6 +128,17 @@ def save_config(cfg: dict) -> None:
     save_json(CONFIG_FILE, cfg)
 
 
+def load_tracking_db() -> dict:
+    """Return the on-disk tracking database. Empty dict if the file is
+    missing (fresh install). Each value is a flat record with at least
+    ``container_number``, ``shipment_id``, ``last_refreshed``, and the
+    keys produced by ``core.status.extract_fields()`` (status, vessel,
+    pol, pod, eta, etd, carrier, transit_pct, original_eta, delay_days).
+    Pre-refresh records may only have container_number / shipment_id /
+    shipping_line / last_refreshed."""
+    return load_json(TRACKING_DB_FILE, {})
+
+
 # ---------------------------------------------------------------------------
 # Legacy migration: token in config.json → keyring
 # ---------------------------------------------------------------------------

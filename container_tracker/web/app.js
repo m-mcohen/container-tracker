@@ -1,9 +1,9 @@
   /* ─────────────────────────────────────────────────────────────────────
    * Bridge shim — thin async wrappers around window.pywebview.api.
-   * Step 4 wires this in but does NOT yet swap the static ROWS array
-   * below for await Bridge.list_containers(). That swap is Step 5; the
-   * shim exists now so the diff there is "swap the data source," not
-   * "introduce the bridge AND swap the data source."
+   * All bridge calls go through this object. NEVER call
+   * window.pywebview.api.* directly elsewhere — typos there fail
+   * silently as TypeError without crossing the bridge to Python.
+   * Centralizing here makes typos JS-side errors with useful names.
    * ──────────────────────────────────────────────────────────────────── */
   const Bridge = {
     async list_containers() { return await window.pywebview.api.list_containers(); },
@@ -13,22 +13,13 @@
   };
 
   /* ─────────────────────────────────────────────────────────────────────
-   * Sample data — shape mirrors what extract_fields() returns from
-   * core. In the pywebview build, replace the inline ROWS array with:
-   *     const rows = await window.pywebview.api.list_containers();
+   * Live container data. Filled by loadInitialData() on pywebviewready;
+   * empty until then. Reassignable (let, not const) because each refresh
+   * replaces the whole array reference rather than mutating it — the
+   * drawer/render code reads ROWS by closure, so reassignment
+   * propagates without subscriber wiring.
    * ──────────────────────────────────────────────────────────────────── */
-  const ROWS = [
-    { cn:"EGLV5555666", carrier:"EVERGREEN",  scac:"EGLV", status:"SAILING",   eta:"2026-04-22", orig:"2026-04-15", delay:"+7 days",  delayVal:7,  pol:"Kaohsiung, TW",   pod:"Los Angeles, USA", vessel:"MV EVER GIVEN",      pct:58 },
-    { cn:"MSKU1234567", carrier:"MAERSK LINE", scac:"MAEU", status:"SAILING",   eta:"2026-05-05", orig:"2026-05-01", delay:"+4 days",  delayVal:4,  pol:"Shanghai, CN",    pod:"Los Angeles, USA", vessel:"MV SEA PIONEER",     pct:42 },
-    { cn:"MSKU2222222", carrier:"MAERSK LINE", scac:"MAEU", status:"SAILING",   eta:"2026-04-28", orig:"2026-04-28", delay:"On time",  delayVal:0,  pol:"Qingdao, CN",     pod:"Oakland, USA",     vessel:"MV CARIBOU",         pct:65 },
-    { cn:"MSCU1111222", carrier:"MSC",         scac:"MSCU", status:"SAILING",   eta:"2026-05-10", orig:"2026-05-10", delay:"On time",  delayVal:0,  pol:"Rotterdam, NL",   pod:"New York, USA",    vessel:"MV ATLANTIC",        pct:22 },
-    { cn:"ONEY7777888", carrier:"ONE",         scac:"ONEY", status:"SAILING",   eta:"2026-05-01", orig:"2026-05-03", delay:"−2 days",  delayVal:-2, pol:"Tokyo, JP",       pod:"Los Angeles, USA", vessel:"MV SAKURA",          pct:88 },
-    { cn:"CMAU7654321", carrier:"CMA CGM",     scac:"CMDU", status:"ARRIVED",   eta:"2026-03-20", orig:"2026-03-20", delay:"On time",  delayVal:0,  pol:"Ningbo, CN",      pod:"Long Beach, USA",  vessel:"MV PACIFIC STAR",    pct:100 },
-    { cn:"CMAU3333333", carrier:"CMA CGM",     scac:"CMDU", status:"DISCHARGED",eta:"2026-04-03", orig:"2026-04-01", delay:"+2 days",  delayVal:2,  pol:"Hong Kong",       pod:"Seattle, USA",     vessel:"MV JADE",            pct:100 },
-    { cn:"ZIMU8888999", carrier:"ZIM",         scac:"ZIMU", status:"GATE_OUT",  eta:"2026-03-10", orig:"2026-03-10", delay:"On time",  delayVal:0,  pol:"Haifa, IL",       pod:"New York, USA",    vessel:"MV ZIM NORFOLK",     pct:100 },
-    { cn:"COSU6666777", carrier:"COSCO",       scac:"COSU", status:"DELIVERED", eta:"2026-03-02", orig:"2026-02-28", delay:"+2 days",  delayVal:2,  pol:"Shanghai, CN",    pod:"Savannah, USA",    vessel:"MV ORIENT",          pct:100 },
-    { cn:"HLCU4444555", carrier:"HAPAG LLOYD", scac:"HLCU", status:"BOOKED",    eta:"",           orig:"",           delay:"",         delayVal:null,pol:"",                pod:"",                 vessel:"",                   pct:null }
-  ];
+  let ROWS = [];
 
   // Status → CSS chip class (mirrors v1 normalize_status logic)
   function statusClass(row) {
@@ -104,7 +95,20 @@
 
     document.getElementById("row-count").textContent = filtered.length;
   }
+  // Initial render with empty ROWS — pywebviewready will trigger a real load.
   render();
+
+  /* ─── Initial data load (replaces Step 3's static-ROWS render) ──────── */
+  async function loadInitialData() {
+    try {
+      ROWS = await Bridge.list_containers();
+      render();
+    } catch (e) {
+      // Step 6 will add UI for this; for now console.error is the contract.
+      console.error('[bridge] list_containers failed', e);
+    }
+  }
+  window.addEventListener('pywebviewready', loadInitialData);
 
   /* ─── Drawer ─── */
   const app = document.getElementById("app");
@@ -244,19 +248,3 @@
     b.addEventListener("click", () => document.getElementById("notice-unmatched").remove())
   );
 
-  /* ─────────────────────────────────────────────────────────────────────
-   * Bridge smoke test — Step 4 only. Proves window.pywebview.api is
-   * reachable. Step 5 will add real bridge calls; this listener can stay
-   * (cheap, only fires once) or be removed. Flagged in commit body.
-   * pywebviewready fires after window.pywebview.api is populated, which
-   * may happen AFTER DOMContentLoaded — never inline-call Bridge.* until
-   * this event has fired.
-   * ──────────────────────────────────────────────────────────────────── */
-  window.addEventListener('pywebviewready', async () => {
-    try {
-      const result = await Bridge.ping();
-      console.log('[bridge] ping →', result);
-    } catch (e) {
-      console.error('[bridge] ping failed', e);
-    }
-  });
