@@ -14,7 +14,7 @@ py -3.12 --version >nul 2>&1
 if %errorlevel% neq 0 ( echo ERROR: Python 3.12 not found. Install via: winget install Python.Python.3.12 & exit /b 1 )
 
 echo [1/3] Installing dependencies...
-py -3.12 -m pip install requests openpyxl customtkinter pillow pyinstaller keyring packaging --quiet
+py -3.12 -m pip install requests openpyxl customtkinter pillow pyinstaller keyring "packaging>=24.2" --quiet
 if %errorlevel% neq 0 ( echo ERROR: pip install failed. & exit /b 1 )
 
 echo [2/3] Compiling ContainerTracker.exe...
