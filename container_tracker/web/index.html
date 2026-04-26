@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- Step 3 will replace this with docs/mockup.html, split into index.html / styles.css / app.js. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Container Tracker</title>
+  <style>
+    :root { color-scheme: light dark; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid;
+      place-items: center;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: #ECEAE5;
+      color: #111111;
+    }
+    .stub {
+      text-align: center;
+      padding: 32px 48px;
+    }
+    .brand {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .accent { color: #2563eb; }
+    .hint {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #666;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1A1A1F; color: #F0EDE8; }
+      .hint { color: #909090; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stub">
+    <div class="brand"><span class="accent">Container</span> Tracker</div>
+    <div class="hint">Loading…</div>
+  </main>
+</body>
+</html>
