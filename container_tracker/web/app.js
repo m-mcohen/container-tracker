@@ -1,4 +1,18 @@
   /* ─────────────────────────────────────────────────────────────────────
+   * Bridge shim — thin async wrappers around window.pywebview.api.
+   * Step 4 wires this in but does NOT yet swap the static ROWS array
+   * below for await Bridge.list_containers(). That swap is Step 5; the
+   * shim exists now so the diff there is "swap the data source," not
+   * "introduce the bridge AND swap the data source."
+   * ──────────────────────────────────────────────────────────────────── */
+  const Bridge = {
+    async list_containers() { return await window.pywebview.api.list_containers(); },
+    async get_container(no) { return await window.pywebview.api.get_container(no); },
+    async get_settings()    { return await window.pywebview.api.get_settings(); },
+    async ping()            { return await window.pywebview.api.ping(); },
+  };
+
+  /* ─────────────────────────────────────────────────────────────────────
    * Sample data — shape mirrors what extract_fields() returns from
    * core. In the pywebview build, replace the inline ROWS array with:
    *     const rows = await window.pywebview.api.list_containers();
@@ -126,6 +140,7 @@
   });
 
   /* ─── Modals ─── */
+  // Modal open-state lives on #app, not on #modal-add. Toggle the parent class.
   document.getElementById("btn-open-add").addEventListener("click", () => app.classList.add("modal-add-open"));
   document.querySelectorAll("[data-close-modal]").forEach(b =>
     b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-remove-open"))
@@ -228,3 +243,20 @@
   document.querySelectorAll("#notice-unmatched .btn-sm").forEach(b =>
     b.addEventListener("click", () => document.getElementById("notice-unmatched").remove())
   );
+
+  /* ─────────────────────────────────────────────────────────────────────
+   * Bridge smoke test — Step 4 only. Proves window.pywebview.api is
+   * reachable. Step 5 will add real bridge calls; this listener can stay
+   * (cheap, only fires once) or be removed. Flagged in commit body.
+   * pywebviewready fires after window.pywebview.api is populated, which
+   * may happen AFTER DOMContentLoaded — never inline-call Bridge.* until
+   * this event has fired.
+   * ──────────────────────────────────────────────────────────────────── */
+  window.addEventListener('pywebviewready', async () => {
+    try {
+      const result = await Bridge.ping();
+      console.log('[bridge] ping →', result);
+    } catch (e) {
+      console.error('[bridge] ping failed', e);
+    }
+  });
