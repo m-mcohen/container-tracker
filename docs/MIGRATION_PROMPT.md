@@ -381,10 +381,40 @@ links open in-webview.
   upgrade path from v1.0.0: install v1.0.0 first, add some containers, then install v1.1.0
   over it and confirm settings + tracking data + API key carry over.
 
+#### Build environment must be isolated
+
+Iteration 1's `build.bat` smoke test surfaced a reproducibility bug that has to be fixed
+here, before the v1.1.0 installer ships. `build.bat` currently runs `py -3.12 -m pip
+install ...` and `py -3.12 -m PyInstaller ...` against system Python. That means the bundle
+includes whatever happens to live in the build host's site-packages — not just the
+project's declared dependencies. On the iteration-1 host, system 3.12 had matplotlib +
+pandas + numpy installed for unrelated work; PyInstaller's setuptools hook bundled all of
+setuptools (280 entries), which pulled in `setuptools._distutils.compat.numpy`, which
+imported numpy, which activated `numpy/_pyinstaller/` and dragged the entire numpy stack
+into the exe — roughly 12–18 MB of the 30 MB bundle.
+
+The non-fix is `--exclude-module numpy` at the PyInstaller invocation. It would shrink
+*this* build but does nothing for tomorrow's pollution: the next contributor (or
+future-you on a reformatted machine) will have a different set of stray packages, and
+the exe shape will silently drift.
+
+The real fix is to isolate the build environment. `build.bat` should create (or reuse)
+a `.venv-build/` venv, install only the dependencies declared in `pyproject.toml`, and
+run PyInstaller from inside that venv. The exe then contains only what the project
+actually declares. The numpy shrink is a side-effect; reproducibility across machines
+is the point.
+
+Verification when implementing: a fresh `build.bat` run on a different machine, or after
+deleting `.venv-build/`, should produce an exe of essentially the same size (12–17 MB
+expected once system pollution is removed) with no explicit excludes needed in the
+PyInstaller invocation.
+
 **Acceptance:** `dist\ContainerTracker.exe` runs end-to-end on a clean VM. Welcome flow
 works. Refresh, add, remove, settings, theme, update banner, Excel integration all work.
 Installer produces `dist\installer\ContainerTracker_Setup_v1.1.0.exe`. Existing v1.0.0 users
-keep their data.
+keep their data. Bundle is reproducible: a build on a freshly-cloned repo with a deleted
+`.venv-build/` produces the same exe (modulo timestamps), independent of what else is
+installed in system Python.
 
 ### Step 10 — Final cleanup
 
