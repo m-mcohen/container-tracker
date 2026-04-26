@@ -106,6 +106,12 @@
     --status-untracked-bg: #2A2A30;
   }
 
+  /* HTML5 `hidden` attribute must always win. Component classes below
+     set `display: flex/grid/block` at the same specificity as `[hidden]`,
+     so the user-agent default of `[hidden] { display: none }` would lose
+     without `!important`. */
+  [hidden] { display: none !important; }
+
   /* ─── Base ──────────────────────────────────────────────────────── */
   * { box-sizing: border-box; }
   html, body {
