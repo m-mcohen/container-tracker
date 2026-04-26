@@ -74,8 +74,10 @@ from container_tracker.core import status as ct_status
 from container_tracker.core.api import ShipsGoClient, resolve_scac
 from container_tracker.core.constants import CARRIER_NAMES
 from container_tracker.core.excel import (
+    append_container_row,
     create_template_excel,
     read_containers_from_excel,
+    remove_container_row,
     update_excel_with_tracking,
 )
 
@@ -140,6 +142,8 @@ def _to_row(cn: str, rec: dict) -> dict:
         "vessel": rec.get("vessel", "") or "",
         "pct": _parse_pct(rec.get("transit_pct")),
         "last_refreshed": rec.get("last_refreshed", "") or "",
+        # Archived: legacy/refreshed records lack the field; absence == False.
+        "archived": bool(rec.get("archived")),
     }
 
 
@@ -237,19 +241,29 @@ class Bridge:
         started = time.monotonic()
         db = ct_config.load_tracking_db()
 
-        # Phase 0: read CNs from Excel and merge as stubs (legacy line 781-793).
-        # Skip both read AND write if the linked file is missing — the
-        # API fetch still runs so JSON state stays current.
+        # Phase 0: read CNs from Excel and reconcile (legacy line 781-793).
+        # Two-way sync: a CN that disappeared from the workbook is
+        # implicitly deleted by the user, so drop it from the DB before
+        # the API fetch — but never auto-remove archived CNs (those
+        # were intentionally taken out of Excel by archive_container and
+        # must persist in the DB so the Archived view can show them).
+        # Skip everything if the linked file is missing.
         excel_read_failed = False
         if excel_path and not excel_missing:
             try:
+                excel_cn_set = set()
                 for raw in read_containers_from_excel(excel_path):
                     cn_up = (raw or "").strip().upper()
-                    if not cn_up:
-                        continue
-                    if cn_up in db:
-                        continue
-                    if cn_up in dismissed:
+                    if cn_up:
+                        excel_cn_set.add(cn_up)
+                # Diff: drop non-archived CNs that are no longer in Excel.
+                for cn in [c for c, r in list(db.items())
+                           if c.upper() not in excel_cn_set
+                           and not r.get("archived")]:
+                    del db[cn]
+                # Pick up CNs added directly in the workbook.
+                for cn_up in excel_cn_set:
+                    if cn_up in db or cn_up in dismissed:
                         continue
                     db[cn_up] = {"container_number": cn_up,
                                  "last_refreshed": None}
@@ -397,10 +411,12 @@ class Bridge:
 
     def add_container(self, cn: str, carrier: str) -> dict:
         """Add a new container. Calls ShipsGoClient.create_shipment
-        immediately (matches legacy container_tracker_gui.py:700-756).
+        immediately (matches legacy container_tracker_gui.py:700-756) and
+        mirrors the new row into the linked workbook so the user sees it
+        in Excel before the next refresh.
 
         Returns ``{"ok": bool, "error": str | None, "was_existing": bool,
-        "container": dict | None}``.
+        "container": dict | None, "excel_write_failed": bool}``.
 
         Distinct error sentinels for JS routing:
           * ``"NOT_ENOUGH_CREDITS"`` (HTTP 402) — global, JS shows toast
@@ -412,22 +428,28 @@ class Bridge:
         is already on the account, we add it locally with whatever data we
         can, and return ``ok=True, was_existing=True`` so JS can render
         the row + show a benign info toast.
+
+        excel_write_failed mirrors the same flag refresh_all surfaces so
+        the JS-side banner system handles both paths uniformly.
         """
         cn_up = (cn or "").strip().upper()
         if len(cn_up) != 11:
             return {"ok": False,
                     "error": "Container number must be 11 characters",
-                    "was_existing": False, "container": None}
+                    "was_existing": False, "container": None,
+                    "excel_write_failed": False}
 
         db = ct_config.load_tracking_db()
         if cn_up in db:
             return {"ok": False, "error": "already_exists_local",
-                    "was_existing": False, "container": None}
+                    "was_existing": False, "container": None,
+                    "excel_write_failed": False}
 
         token = ct_credentials.get_api_token()
         if not token:
             return {"ok": False, "error": "API token not configured",
-                    "was_existing": False, "container": None}
+                    "was_existing": False, "container": None,
+                    "excel_write_failed": False}
 
         scac = resolve_scac(carrier or "")
         client = ShipsGoClient(token)
@@ -436,11 +458,13 @@ class Bridge:
                                           carrier_scac=scac)
         except Exception as e:
             return {"ok": False, "error": str(e),
-                    "was_existing": False, "container": None}
+                    "was_existing": False, "container": None,
+                    "excel_write_failed": False}
 
         if isinstance(resp, dict) and resp.get("error") == "NOT_ENOUGH_CREDITS":
             return {"ok": False, "error": "NOT_ENOUGH_CREDITS",
-                    "was_existing": False, "container": None}
+                    "was_existing": False, "container": None,
+                    "excel_write_failed": False}
 
         already = bool(isinstance(resp, dict) and resp.get("already_exists"))
         sid = (resp.get("id") or resp.get("shipment_id")
@@ -465,11 +489,23 @@ class Bridge:
         db[cn_up] = rec
         ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
 
+        excel_write_failed = False
+        cfg = ct_config.load_config()
+        excel_path = (cfg.get("excel_path") or "").strip()
+        if excel_path and Path(excel_path).exists():
+            try:
+                append_container_row(excel_path, cn_up,
+                                     carrier=carrier or "", status="NEW")
+            except Exception as e:
+                logger.warning("add_container: excel append failed: %s", e)
+                excel_write_failed = True
+
         return {
             "ok": True,
             "error": None,
             "was_existing": already,
             "container": _to_row(cn_up, rec),
+            "excel_write_failed": excel_write_failed,
         }
 
     def remove_container(self, cn: str) -> dict:
@@ -482,6 +518,43 @@ class Bridge:
             del db[cn_up]
             ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
         return {"ok": True, "error": None}
+
+    def archive_container(self, cn: str) -> dict:
+        """Mark a CN as archived and remove its row from the linked
+        workbook. Archived records stay in tracking_data.json so the
+        Archived view in the UI can list them; refresh_all's two-way
+        sync skips archived rows when diffing the workbook so they
+        don't get re-deleted from the DB.
+
+        Returns ``{"ok": bool, "error": str | None, "container": dict |
+        None, "excel_write_failed": bool}``. If Excel is locked when we
+        try to delete the row, excel_write_failed=True and the JS-side
+        banner fires; the archive flag itself is still persisted (the
+        next refresh will retry the Excel removal via the diff path).
+        """
+        cn_up = (cn or "").strip().upper()
+        db = ct_config.load_tracking_db()
+        rec = db.get(cn_up)
+        if rec is None:
+            return {"ok": False, "error": "not in tracking database",
+                    "container": None, "excel_write_failed": False}
+
+        rec["archived"] = True
+        ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
+
+        excel_write_failed = False
+        cfg = ct_config.load_config()
+        excel_path = (cfg.get("excel_path") or "").strip()
+        if excel_path and Path(excel_path).exists():
+            try:
+                remove_container_row(excel_path, cn_up)
+            except Exception as e:
+                logger.warning("archive_container: excel removal failed: %s", e)
+                excel_write_failed = True
+
+        return {"ok": True, "error": None,
+                "container": _to_row(cn_up, rec),
+                "excel_write_failed": excel_write_failed}
 
     # --- Settings ----------------------------------------------------------
 

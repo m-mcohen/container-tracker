@@ -154,6 +154,73 @@ def update_excel_with_tracking(path, data):
     return count
 
 
+def append_container_row(path, cn, carrier="", status="NEW"):
+    """Append a single new CN to the linked workbook. Idempotent — if cn
+    is already in the container column, returns False without writing.
+
+    Used by add_container so a freshly-tracked CN appears in the user's
+    spreadsheet immediately, before the next refresh. Only the carrier
+    and status columns are populated; tracked fields the bridge doesn't
+    have yet (eta, route, etc.) stay blank and get filled on first
+    refresh by update_excel_with_tracking.
+    """
+    cn_up = str(cn).strip().upper()
+    if not cn_up:
+        return False
+    wb = load_workbook(str(path))
+    try:
+        ws = wb.active
+        cc = find_container_column(ws)
+        if cc is None:
+            raise ValueError("No Container column found.")
+        for r in range(2, ws.max_row + 1):
+            v = ws.cell(row=r, column=cc).value
+            if v and str(v).strip().upper() == cn_up:
+                return False
+        fm = find_or_create_tracking_columns(ws)
+        nr = ws.max_row + 1
+        ws.cell(row=nr, column=cc, value=cn_up)
+        if carrier and "carrier" in fm:
+            ws.cell(row=nr, column=fm["carrier"], value=carrier)
+        if status and "status" in fm:
+            ws.cell(row=nr, column=fm["status"], value=status)
+        wb.save(str(path))
+        return True
+    finally:
+        wb.close()
+
+
+def remove_container_row(path, cn):
+    """Delete the workbook row(s) whose Container # cell matches cn.
+    No-op if cn isn't found. Returns the count of rows removed.
+
+    Used by archive_container to keep the spreadsheet in sync when the
+    user archives a container in the UI.
+    """
+    cn_up = str(cn).strip().upper()
+    if not cn_up:
+        return 0
+    wb = load_workbook(str(path))
+    try:
+        ws = wb.active
+        cc = find_container_column(ws)
+        if cc is None:
+            return 0
+        # Walk top-down to collect, delete bottom-up so indices don't shift.
+        to_delete = []
+        for r in range(2, ws.max_row + 1):
+            v = ws.cell(row=r, column=cc).value
+            if v and str(v).strip().upper() == cn_up:
+                to_delete.append(r)
+        for r in reversed(to_delete):
+            ws.delete_rows(r)
+        if to_delete:
+            wb.save(str(path))
+        return len(to_delete)
+    finally:
+        wb.close()
+
+
 def create_template_excel(path):
     wb = Workbook()
     ws = wb.active

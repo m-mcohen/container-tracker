@@ -655,6 +655,51 @@
   .chip-status.booked .dot { background: var(--status-booked); }
   .chip-status.untracked  { background: var(--status-untracked-bg);  color: var(--status-untracked); }
   .chip-status.untracked .dot { background: var(--status-untracked); }
+  .chip-status.archived   { background: var(--status-untracked-bg);  color: var(--status-untracked); }
+  .chip-status.archived .dot { background: var(--status-untracked); }
+
+  /* Archived rows are kept in the table only when the Archived chip
+   * is active. Greyed via opacity so the data is readable but visually
+   * recedes. */
+  .shipments tr.is-archived { opacity: 0.55; }
+  .shipments tr.is-archived:hover { opacity: 0.75; }
+  .row-action-stub {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 11px;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-tertiary);
+    cursor: not-allowed;
+    font-weight: 500;
+  }
+
+  /* Row action popup menu — positioned via JS next to the … button. */
+  .row-menu {
+    position: fixed;
+    background: var(--surface-base);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: var(--shadow-md);
+    padding: 4px;
+    z-index: 60;
+    min-width: 140px;
+  }
+  .row-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .row-menu-item:hover { background: var(--surface-subtle); }
+  .row-menu-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
 
   .delay-pos { color: var(--status-delayed); font-weight: 600; }
   .delay-neg { color: var(--status-arrived); font-weight: 600; }
@@ -819,6 +864,7 @@
   }
   .app.modal-add-open #modal-add { display: flex; }
   .app.modal-register-open #modal-register-unmatched { display: flex; }
+  .app.modal-archive-open #modal-archive { display: flex; }
   /* Register-unmatched modal is wider — fits CN + carrier dropdown rows. */
   #modal-register-unmatched .modal { width: 520px; }
   .register-list {

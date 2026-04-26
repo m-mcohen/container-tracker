@@ -14,6 +14,7 @@
     async refresh_one(cn)   { return await window.pywebview.api.refresh_one(cn); },
     async add_container(cn, carrier) { return await window.pywebview.api.add_container(cn, carrier); },
     async remove_container(cn) { return await window.pywebview.api.remove_container(cn); },
+    async archive_container(cn) { return await window.pywebview.api.archive_container(cn); },
     async list_carriers()   { return await window.pywebview.api.list_carriers(); },
     async set_excel_path(p) { return await window.pywebview.api.set_excel_path(p); },
     async create_excel_template(p) { return await window.pywebview.api.create_excel_template(p); },
@@ -186,13 +187,17 @@
   // Three of four KPI subtitles are intentionally blank for now; only
   // kpi-tracked-sub ("Across N carriers") is wired.
   function renderStats() {
-    const total = ROWS.length;
-    const sailing = ROWS.filter(r => r.status === "SAILING").length;
-    const arrived = ROWS.filter(r => r.status === "ARRIVED" || r.status === "DISCHARGED").length;
+    // Archived rows are excluded from every count except their own chip
+    // — "All" means "all live" by spec.
+    const live = ROWS.filter(r => !r.archived);
+    const total = live.length;
+    const archivedCount = ROWS.length - total;
+    const sailing = live.filter(r => r.status === "SAILING").length;
+    const arrived = live.filter(r => r.status === "ARRIVED" || r.status === "DISCHARGED").length;
     // `> 0` is load-bearing: Number(null) coerces to 0 and Number(undefined) to NaN,
     // both of which fail `> 0` correctly. Switching to `>= 0` would count nulls as delayed.
-    const delayed = ROWS.filter(r => Number(r.delayVal) > 0).length;
-    const booked  = ROWS.filter(r => r.status === "BOOKED").length;
+    const delayed = live.filter(r => Number(r.delayVal) > 0).length;
+    const booked  = live.filter(r => r.status === "BOOKED").length;
 
     setText("title-count", `· ${total} tracked`);
 
@@ -201,7 +206,7 @@
     setText("kpi-arrived", String(arrived));
     setText("kpi-delayed", String(delayed));
 
-    const carriers = new Set(ROWS.map(r => r.carrier).filter(Boolean)).size;
+    const carriers = new Set(live.map(r => r.carrier).filter(Boolean)).size;
     setText("kpi-tracked-sub", carriers ? `Across ${carriers} carrier${carriers === 1 ? "" : "s"}` : "");
     setText("kpi-sailing-sub", "");
     setText("kpi-arrived-sub", "");
@@ -212,6 +217,7 @@
     setText("chip-count-sailing", String(sailing));
     setText("chip-count-arrived", String(arrived));
     setText("chip-count-booked", String(booked));
+    setText("chip-count-archived", String(archivedCount));
 
     setText("row-total", String(total));
   }
@@ -221,6 +227,10 @@
     const q = (document.getElementById("search").value || "").toUpperCase();
     const filtered = ROWS
       .filter(r => {
+        const isArchived = r.archived === true;
+        // Archived view shows ONLY archived; every other view excludes them.
+        if (activeFilter === "archived") return isArchived;
+        if (isArchived) return false;
         if (activeFilter === "delayed") return statusClass(r) === "delayed";
         if (activeFilter === "sailing") return statusClass(r) === "sailing";
         if (activeFilter === "arrived") return ["arrived","discharged","gateout","delivered"].includes(statusClass(r));
@@ -231,7 +241,8 @@
       .sort((a, b) => rank(a) - rank(b) || a.cn.localeCompare(b.cn));
 
     TBODY.innerHTML = filtered.map(r => {
-      const cls = statusClass(r);
+      const isArchived = r.archived === true;
+      const cls = isArchived ? "archived" : statusClass(r);
       const delayCls = r.delayVal > 0 ? "delay-pos" : (r.delayVal < 0 ? "delay-neg" : "delay-neutral");
       const pctHtml = r.pct === null
         ? `<span class="muted" style="font-size:11px">Not yet sailed</span>`
@@ -239,24 +250,28 @@
       const routeHtml = !r.pol
         ? `<span class="muted">—</span>`
         : `<span class="route"><span>${r.pol}</span><span class="arrow">→</span><span>${r.pod}</span></span>`;
+      const statusBadge = isArchived
+        ? `<span class="chip-status archived"><span class="dot"></span>Archived</span>`
+        : `<span class="chip-status ${cls}"><span class="dot"></span>${statusLabel(r)}</span>`;
+      const actionsCell = isArchived
+        ? `<button class="row-action-stub" type="button" disabled title="Coming soon" aria-label="Restore ${r.cn}">Restore</button>`
+        : `<div class="row-actions">
+              <button class="row-action" data-action="refresh" data-cn="${r.cn}" aria-label="Refresh ${r.cn}" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+              <button class="row-action" data-action="more" data-cn="${r.cn}" aria-label="More actions for ${r.cn}" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
+            </div>`;
       return `
-        <tr data-cn="${r.cn}">
+        <tr data-cn="${r.cn}"${isArchived ? ' class="is-archived"' : ''}>
           <td><input type="checkbox" aria-label="Select ${r.cn}" onclick="event.stopPropagation()" /></td>
           <td><span class="cn">${r.cn}</span></td>
           <td><span class="carrier"><span class="carrier-badge c-${r.scac}">${r.scac}</span>${r.carrier}</span></td>
-          <td><span class="chip-status ${cls}"><span class="dot"></span>${statusLabel(r)}</span></td>
+          <td>${statusBadge}</td>
           <td>${r.orig || '<span class="muted">—</span>'}</td>
           <td>${r.eta || '<span class="muted">—</span>'}</td>
           <td><span class="${delayCls}">${r.delay || '—'}</span></td>
           <td>${routeHtml}</td>
           <td>${r.vessel || '<span class="muted">—</span>'}</td>
           <td><div class="transit">${pctHtml}</div></td>
-          <td>
-            <div class="row-actions">
-              <button class="row-action" aria-label="Refresh ${r.cn}" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
-              <button class="row-action" aria-label="More actions for ${r.cn}" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
-            </div>
-          </td>
+          <td>${actionsCell}</td>
         </tr>`;
     }).join("");
 
@@ -349,11 +364,13 @@
     app.classList.add("modal-add-open");
   });
   document.querySelectorAll("[data-close-modal]").forEach(b =>
-    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-register-open"))
+    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-register-open", "modal-archive-open"))
   );
-  ["modal-add"].forEach(id => {
-    document.getElementById(id).addEventListener("click", (e) => {
-      if (e.target.id === id) app.classList.remove("modal-add-open");
+  ["modal-add", "modal-archive"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("click", (e) => {
+      if (e.target.id === id) app.classList.remove("modal-add-open", "modal-archive-open");
     });
   });
 
@@ -394,6 +411,9 @@
     resetAddModal();
     if (result.was_existing) {
       showInfo("Already on ShipsGo — added to your dashboard.");
+    }
+    if (result.excel_write_failed) {
+      showExcelWriteFailedBanner();
     }
   }
   document.getElementById("btn-add-submit").addEventListener("click", handleAddSubmit);
@@ -515,7 +535,8 @@
   /* ─── Keyboard shortcuts ─── */
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      app.classList.remove("modal-add-open", "modal-register-open");
+      app.classList.remove("modal-add-open", "modal-register-open", "modal-archive-open");
+      closeRowMenu();
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
@@ -728,4 +749,92 @@
   if (excelCreateBtn) excelCreateBtn.addEventListener("click", handleExcelCreate);
   const excelOpenBtn = document.getElementById("btn-excel-open");
   if (excelOpenBtn) excelOpenBtn.addEventListener("click", handleExcelOpen);
+
+  /* ─── Row action menu + archive flow ─── */
+  // Position the menu next to the trigger button using viewport coords
+  // (position: fixed in CSS). One global menu element for all rows.
+  function openRowMenu(triggerBtn, cn) {
+    const menu = document.getElementById("row-menu");
+    if (!menu) return;
+    const rect = triggerBtn.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.left = `${Math.max(8, rect.right - 140)}px`;
+    menu.dataset.cn = cn;
+    menu.hidden = false;
+  }
+  function closeRowMenu() {
+    const menu = document.getElementById("row-menu");
+    if (!menu) return;
+    menu.hidden = true;
+    menu.dataset.cn = "";
+  }
+
+  TBODY.addEventListener("click", (e) => {
+    const moreBtn = e.target.closest("[data-action='more']");
+    if (!moreBtn) return;
+    e.stopPropagation();
+    openRowMenu(moreBtn, moreBtn.dataset.cn || "");
+  });
+
+  const rowMenu = document.getElementById("row-menu");
+  if (rowMenu) {
+    rowMenu.addEventListener("click", (e) => {
+      const item = e.target.closest("[data-action]");
+      if (!item) return;
+      const action = item.dataset.action;
+      const cn = rowMenu.dataset.cn || "";
+      closeRowMenu();
+      if (action === "archive" && cn) openArchiveModal(cn);
+    });
+  }
+  // Click anywhere else closes the menu. Capture phase so the menu
+  // closes before any other handler runs.
+  document.addEventListener("click", (e) => {
+    const menu = document.getElementById("row-menu");
+    if (!menu || menu.hidden) return;
+    if (e.target.closest("#row-menu")) return;
+    if (e.target.closest("[data-action='more']")) return;
+    closeRowMenu();
+  });
+
+  function openArchiveModal(cn) {
+    const cnEl = document.getElementById("archive-cn");
+    if (cnEl) cnEl.textContent = cn;
+    const modal = document.getElementById("modal-archive");
+    if (modal) modal.dataset.cn = cn;
+    app.classList.add("modal-archive-open");
+  }
+
+  async function handleArchiveConfirm() {
+    const modal = document.getElementById("modal-archive");
+    const cn = (modal && modal.dataset.cn) || "";
+    if (!cn) {
+      app.classList.remove("modal-archive-open");
+      return;
+    }
+    app.classList.remove("modal-archive-open");
+    let result;
+    try {
+      result = await Bridge.archive_container(cn);
+    } catch (e) {
+      showError(`Archive failed: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!result.ok) {
+      showError(`Archive failed: ${result.error || "unknown"}`);
+      return;
+    }
+    // Mark archived in ROWS rather than removing — the Archived view
+    // needs to find it later. The render filter hides it from every
+    // other view automatically.
+    const idx = ROWS.findIndex(r => r.cn === cn);
+    if (idx >= 0) ROWS[idx] = Object.assign({}, ROWS[idx], { archived: true });
+    render();
+    if (result.excel_write_failed) {
+      showExcelWriteFailedBanner();
+    }
+    showInfo("Container archived.");
+  }
+  const archiveConfirmBtn = document.getElementById("btn-archive-confirm");
+  if (archiveConfirmBtn) archiveConfirmBtn.addEventListener("click", handleArchiveConfirm);
 

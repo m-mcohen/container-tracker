@@ -141,6 +141,7 @@
           <button type="button" class="chip" data-filter="sailing" aria-pressed="false">Sailing <span class="count" id="chip-count-sailing">0</span></button>
           <button type="button" class="chip" data-filter="arrived" aria-pressed="false">Arrived <span class="count" id="chip-count-arrived">0</span></button>
           <button type="button" class="chip" data-filter="booked" aria-pressed="false">Booked <span class="count" id="chip-count-booked">0</span></button>
+          <button type="button" class="chip" data-filter="archived" aria-pressed="false">Archived <span class="count" id="chip-count-archived">0</span></button>
           <div class="spacer"></div>
           <span class="refresh-meta">Last refreshed <span class="time" id="last-refresh"></span></span>
         </div>
@@ -351,6 +352,29 @@
     </section>
 
   </main>
+
+  <!-- ─── Row action menu (positioned via JS next to the … button) ─── -->
+  <div class="row-menu" id="row-menu" hidden role="menu">
+    <button type="button" class="row-menu-item" data-action="archive" role="menuitem">Archive</button>
+  </div>
+
+  <!-- ─── Modal: Confirm archive ─── -->
+  <div class="modal-backdrop" id="modal-archive">
+    <div class="modal" role="dialog" aria-labelledby="modal-archive-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-archive-title">Archive this container?</div>
+      </div>
+      <div class="modal-body">
+        <div class="callout">
+          <strong style="font-family:var(--font-mono)" id="archive-cn">CN</strong> will be removed from your Excel file. You can find archived containers in the Archived view.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary" id="btn-archive-confirm">Archive</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ─── Modal: Add container ─── -->
   <div class="modal-backdrop" id="modal-add">

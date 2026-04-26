@@ -25,6 +25,7 @@ ROWS_KEYS = {
     "eta", "orig", "delay", "delayVal",
     "pol", "pod", "vessel", "pct",
     "last_refreshed",
+    "archived",
 }
 
 
@@ -698,14 +699,17 @@ def test_refresh_all_excel_locked_on_write(
     """PermissionError during write → flag set, db saved, refresh
     completes (legacy behavior matches; improvement is the explicit flag
     surfaced to JS)."""
-    sample_tracking_db()
+    records = sample_tracking_db()
+    cn_in_db = next(iter(records))
     save_spy["tracking_writes"] = 0
     payload = _fixture_payload()
     inner = payload["shipment"]
     _link_workbook("C:/some/file.xlsx")
     monkeypatch.setattr(ct_bridge.Path, "exists", lambda self: True)
+    # Echo the DB's CN back so the two-way-sync diff doesn't drop it
+    # before the write phase has a chance to run.
     monkeypatch.setattr(ct_bridge, "read_containers_from_excel",
-                        lambda p: [])
+                        lambda p: [cn_in_db])
 
     def locked(p, db):
         raise PermissionError("file in use")
@@ -986,3 +990,210 @@ def test_dismiss_unmatched_idempotent(isolated_data_dir):
     # Each CN appears exactly once even after two dismiss calls.
     assert cfg["dismissed"].count("EXIST1111111") == 1
     assert cfg["dismissed"].count("NEWXX2222222") == 1
+
+
+# ---------------------------------------------------------------------------
+# Two-way Excel sync + archiving (current iteration)
+# ---------------------------------------------------------------------------
+
+
+# --- add_container Excel mirror -------------------------------------------
+
+def test_add_container_no_excel_linked_silent(
+        isolated_data_dir, monkeypatch, patched_token):
+    """No linked workbook → no excel_write_failed, no helper invoked."""
+    factory = _FakeShipsGoClient.factory(create_response={"id": "abc"})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    def boom(*a, **k):  # pragma: no cover - only fires if the test fails
+        raise AssertionError("excel append should not be called")
+    monkeypatch.setattr(ct_bridge, "append_container_row", boom)
+
+    result = Bridge().add_container("MSKU1234567", "MAERSK")
+
+    assert result["ok"] is True
+    assert result["excel_write_failed"] is False
+
+
+def test_add_container_excel_writable_appends_row(
+        isolated_data_dir, monkeypatch, patched_token, sample_workbook):
+    """Linked + writable → new CN gets a row with carrier and status NEW."""
+    wb_path = sample_workbook(rows=("MSCU1111111",))
+    _link_workbook(wb_path)
+    factory = _FakeShipsGoClient.factory(create_response={"id": "abc"})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().add_container("MSKU1234567", "MAERSK")
+
+    assert result["ok"] is True
+    assert result["excel_write_failed"] is False
+    # Verify the row landed in the workbook.
+    from openpyxl import load_workbook
+    wb = load_workbook(str(wb_path))
+    ws = wb.active
+    cns = []
+    for r in range(2, ws.max_row + 1):
+        v = ws.cell(row=r, column=1).value
+        if v:
+            cns.append(str(v).strip().upper())
+    wb.close()
+    assert "MSKU1234567" in cns
+
+
+def test_add_container_excel_locked_returns_flag(
+        isolated_data_dir, monkeypatch, patched_token, sample_workbook):
+    """PermissionError during append → excel_write_failed=True, the
+    DB write still succeeded."""
+    wb_path = sample_workbook()
+    _link_workbook(wb_path)
+    factory = _FakeShipsGoClient.factory(create_response={"id": "abc"})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    def locked(path, cn, carrier="", status="NEW"):
+        raise PermissionError("file in use")
+    monkeypatch.setattr(ct_bridge, "append_container_row", locked)
+
+    result = Bridge().add_container("MSKU1234567", "MAERSK")
+
+    assert result["ok"] is True
+    assert result["excel_write_failed"] is True
+    # DB still got the new record despite the Excel failure.
+    assert "MSKU1234567" in ct_config.load_tracking_db()
+
+
+# --- refresh_all two-way diff ---------------------------------------------
+
+def test_refresh_removes_cns_deleted_from_excel(
+        isolated_data_dir, monkeypatch, patched_token, sample_workbook):
+    """A CN tracked in the DB but absent from the Excel CN list should
+    be removed before the API fetch runs."""
+    wb_path = sample_workbook(rows=("KEEP1111111",))
+    _link_workbook(wb_path)
+    ct_config.TRACKING_DB_FILE.write_text(json.dumps({
+        "KEEP1111111": {"container_number": "KEEP1111111",
+                        "shipment_id": "sid-keep"},
+        "GONE2222222": {"container_number": "GONE2222222",
+                        "shipment_id": "sid-gone"},
+    }))
+    factory = _FakeShipsGoClient.factory(listing=[], get_results={})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+    # Don't actually rewrite the workbook on the way out.
+    monkeypatch.setattr(ct_bridge, "update_excel_with_tracking",
+                        lambda p, db: 0)
+
+    Bridge().refresh_all()
+
+    persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert "KEEP1111111" in persisted
+    assert "GONE2222222" not in persisted
+
+
+def test_refresh_keeps_archived_cns_not_in_excel(
+        isolated_data_dir, monkeypatch, patched_token, sample_workbook):
+    """Archived CNs are intentionally absent from Excel (archive_container
+    removed them), so the diff path must not also remove them from the DB."""
+    wb_path = sample_workbook(rows=("LIVE1111111",))
+    _link_workbook(wb_path)
+    ct_config.TRACKING_DB_FILE.write_text(json.dumps({
+        "LIVE1111111": {"container_number": "LIVE1111111",
+                        "shipment_id": "sid-live"},
+        "ARCH2222222": {"container_number": "ARCH2222222",
+                        "shipment_id": "sid-arch", "archived": True},
+    }))
+    factory = _FakeShipsGoClient.factory(listing=[], get_results={})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+    monkeypatch.setattr(ct_bridge, "update_excel_with_tracking",
+                        lambda p, db: 0)
+
+    Bridge().refresh_all()
+
+    persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert "ARCH2222222" in persisted
+    assert persisted["ARCH2222222"]["archived"] is True
+
+
+def test_refresh_no_excel_linked_no_removal(
+        isolated_data_dir, monkeypatch, patched_token, sample_tracking_db):
+    """Without a linked workbook there's nothing to diff against — the
+    DB must be left intact regardless of who's in it."""
+    sample_tracking_db()
+    factory = _FakeShipsGoClient.factory(listing=[], get_results={})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+    cns_before = set(ct_config.load_tracking_db().keys())
+
+    Bridge().refresh_all()
+
+    cns_after = set(ct_config.load_tracking_db().keys())
+    assert cns_after == cns_before
+
+
+# --- archive_container ----------------------------------------------------
+
+def test_archive_container_sets_archived_flag(
+        isolated_data_dir, sample_tracking_db):
+    records = sample_tracking_db()
+    cn = next(iter(records))
+
+    result = Bridge().archive_container(cn)
+
+    assert result["ok"] is True
+    assert result["error"] is None
+    assert result["container"]["archived"] is True
+    persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert persisted[cn]["archived"] is True
+
+
+def test_archive_container_removes_excel_row(
+        isolated_data_dir, monkeypatch, sample_workbook):
+    wb_path = sample_workbook(rows=("AAAA1111111", "BBBB2222222"))
+    _link_workbook(wb_path)
+    ct_config.TRACKING_DB_FILE.write_text(json.dumps({
+        "AAAA1111111": {"container_number": "AAAA1111111"},
+        "BBBB2222222": {"container_number": "BBBB2222222"},
+    }))
+
+    result = Bridge().archive_container("AAAA1111111")
+
+    assert result["ok"] is True
+    assert result["excel_write_failed"] is False
+    # Verify the row is actually gone from the workbook.
+    from openpyxl import load_workbook
+    wb = load_workbook(str(wb_path))
+    ws = wb.active
+    remaining = []
+    for r in range(2, ws.max_row + 1):
+        v = ws.cell(row=r, column=1).value
+        if v:
+            remaining.append(str(v).strip().upper())
+    wb.close()
+    assert "AAAA1111111" not in remaining
+    assert "BBBB2222222" in remaining
+
+
+def test_archive_container_locked_excel_returns_flag(
+        isolated_data_dir, monkeypatch, sample_workbook):
+    wb_path = sample_workbook(rows=("AAAA1111111",))
+    _link_workbook(wb_path)
+    ct_config.TRACKING_DB_FILE.write_text(json.dumps({
+        "AAAA1111111": {"container_number": "AAAA1111111"},
+    }))
+
+    def locked(path, cn):
+        raise PermissionError("file in use")
+    monkeypatch.setattr(ct_bridge, "remove_container_row", locked)
+
+    result = Bridge().archive_container("AAAA1111111")
+
+    assert result["ok"] is True
+    assert result["excel_write_failed"] is True
+    # archived flag still got persisted; the next refresh's diff will
+    # eventually retry the Excel removal.
+    persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert persisted["AAAA1111111"]["archived"] is True
+
+
+def test_archive_container_missing_cn(isolated_data_dir):
+    result = Bridge().archive_container("ZZZZ9999999")
+    assert result["ok"] is False
+    assert "not in tracking" in (result["error"] or "").lower()
+    assert result["container"] is None
