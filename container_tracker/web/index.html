@@ -1,45 +1,477 @@
 <!doctype html>
-<!-- Step 3 will replace this with docs/mockup.html, split into index.html / styles.css / app.js. -->
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=1280" />
   <title>Container Tracker</title>
-  <style>
-    :root { color-scheme: light dark; }
-    html, body { height: 100%; margin: 0; }
-    body {
-      display: grid;
-      place-items: center;
-      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: #ECEAE5;
-      color: #111111;
-    }
-    .stub {
-      text-align: center;
-      padding: 32px 48px;
-    }
-    .brand {
-      font-size: 22px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-    }
-    .accent { color: #2563eb; }
-    .hint {
-      margin-top: 8px;
-      font-size: 13px;
-      color: #666;
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1A1A1F; color: #F0EDE8; }
-      .hint { color: #909090; }
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="stub">
-    <div class="brand"><span class="accent">Container</span> Tracker</div>
-    <div class="hint">Loading…</div>
+
+<div class="app" id="app">
+
+  <!-- ─── Main column (sidebar removed; brand lives in topbar) ─── -->
+  <main class="main">
+
+    <!-- ═══ DASHBOARD ═══ -->
+    <section class="view is-active" id="view-dashboard">
+      <header class="topbar">
+        <a class="brand" href="#" data-view="dashboard" aria-label="Container Tracker — back to dashboard">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M5 11h2M9 11h2M13 11h2M17 11h2M5 15h2M9 15h2M13 15h2M17 15h2"/></svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Container Tracker</span>
+            <span class="brand-company"></span>
+          </span>
+        </a>
+        <div class="divider" aria-hidden="true"></div>
+        <div class="page-title">Shipments <span class="muted" id="title-count">· 10 tracked</span></div>
+        <div class="spacer"></div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input id="search" type="text" placeholder="Search container, vessel, route…" />
+          <span class="kbd">Ctrl+K</span>
+        </div>
+        <button class="theme-switch" id="theme-switch" role="switch" aria-checked="false" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+        <button class="icon-btn" data-view="settings" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.34.22.7.22 1.07 0 .36-.08.72-.22 1.07z"/></svg>
+        </button>
+        <button class="btn" id="btn-open-add">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add container
+        </button>
+        <button class="btn btn-primary" id="btn-refresh" title="Refresh All ETAs & Update Excel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+          Refresh
+        </button>
+      </header>
+
+      <div class="content">
+
+        <!-- Notification stack — update banner + inline notices share a single column -->
+        <div class="notifications" role="region" aria-label="Notifications">
+          <!-- Update banner — hidden until check_for_update() returns a newer release. JS populates the version text and the download link. -->
+          <div class="banner" role="status" id="update-banner" hidden>
+            <span class="pill">New</span>
+            <span class="banner-text"></span>
+            <a href="#" class="banner-link">Download update →</a>
+            <button class="dismiss" title="Dismiss" aria-label="Dismiss update notice">×</button>
+          </div>
+          <!-- Unmatched-containers notice — hidden until refresh_all() returns containers in Excel that aren't on ShipsGo. JS fills in the count and credit cost. -->
+          <div class="notice" id="notice-unmatched" hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <div class="notice-body">
+              <strong class="notice-title"></strong>
+              <span class="notice-detail">They aren't on ShipsGo yet. Register them now or skip until next refresh.</span>
+            </div>
+            <div class="notice-actions">
+              <button class="btn btn-sm" id="notice-skip">Skip</button>
+              <button class="btn btn-sm btn-primary" id="notice-register"></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Linked spreadsheet card -->
+        <div class="spreadsheet-card">
+          <div class="xls-icon">XLSX</div>
+          <div class="meta">
+            <div class="label">Linked spreadsheet</div>
+            <div class="path" title="C:\Users\michael\Documents\Container_Tracking.xlsx">C:\Users\michael\Documents\Container_Tracking.xlsx</div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm">Browse…</button>
+            <button class="btn btn-sm">Create template</button>
+            <button class="btn btn-sm btn-primary">Open in Excel</button>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label"><span class="dot"></span>Tracked</div>
+            <div class="stat-number">10</div>
+            <div class="stat-sub">Across <strong>8 carriers</strong></div>
+          </div>
+          <div class="stat is-sailing">
+            <div class="stat-label"><span class="dot"></span>Sailing</div>
+            <div class="stat-number">5</div>
+            <div class="stat-sub">Avg. transit <strong>54%</strong></div>
+          </div>
+          <div class="stat is-arrived">
+            <div class="stat-label"><span class="dot"></span>Arrived</div>
+            <div class="stat-number">4</div>
+            <div class="stat-sub"><strong>+1</strong> this week</div>
+          </div>
+          <div class="stat is-delayed">
+            <div class="stat-label"><span class="dot"></span>Delayed</div>
+            <div class="stat-number">2</div>
+            <div class="stat-sub">Longest <strong>+7 days</strong></div>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar" role="toolbar" aria-label="Filter shipments by status">
+          <button type="button" class="chip is-active" data-filter="all" aria-pressed="true">All <span class="count">10</span></button>
+          <button type="button" class="chip" data-filter="delayed" aria-pressed="false">Delayed <span class="count">2</span></button>
+          <button type="button" class="chip" data-filter="sailing" aria-pressed="false">Sailing <span class="count">5</span></button>
+          <button type="button" class="chip" data-filter="arrived" aria-pressed="false">Arrived <span class="count">4</span></button>
+          <button type="button" class="chip" data-filter="booked" aria-pressed="false">Booked <span class="count">1</span></button>
+          <div class="spacer"></div>
+          <span class="refresh-meta">Last refreshed <span class="time" id="last-refresh"></span></span>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+          <table class="shipments">
+            <thead>
+              <tr>
+                <th style="width: 36px;"><input type="checkbox" aria-label="Select all" /></th>
+                <th class="sortable">Container #</th>
+                <th class="sortable">Carrier</th>
+                <th class="sorted">Status</th>
+                <th class="sortable">Original ETA</th>
+                <th class="sortable">Current ETA</th>
+                <th class="sortable">Delay</th>
+                <th>Route</th>
+                <th>Vessel</th>
+                <th style="min-width:150px">Transit</th>
+                <th style="width:64px"><span class="vh">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody id="shipments-tbody"></tbody>
+          </table>
+          <div class="table-footer">
+            <span>Showing <strong id="row-count">10</strong> of <strong>10</strong> containers</span>
+            <div class="spacer"></div>
+            <span class="muted">Sorted by <strong>Status</strong> (delayed first)</span>
+          </div>
+        </div>
+
+        <!-- Activity log (collapsible — collapsed by default; click header to expand) -->
+        <div class="activity-panel is-collapsed" id="activity-panel">
+          <button type="button" class="activity-header" id="activity-toggle" aria-expanded="false" aria-controls="activity-body">
+            <svg class="toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+            <span class="label">Activity log</span>
+            <div class="spacer"></div>
+            <span class="muted" style="font-size:11px">Last 50 events</span>
+          </button>
+          <div class="activity-body" id="activity-body">
+<div><span class="ts">[3:12 PM]</span> <span class="ok">Refreshed 10 containers — 3:12 PM EST</span></div>
+<div><span class="ts">[3:12 PM]</span> Updated 10 rows in Excel</div>
+<div><span class="ts">[3:12 PM]</span> --- DONE: 10 matched, 0 unmatched, 2 actively delayed, 10 Excel rows updated ---</div>
+<div><span class="ts">[3:12 PM]</span> &nbsp;&nbsp;EGLV5555666: SAILING | ETA: 2026-04-22 | Kaohsiung -> Los Angeles | DELAYED +7 days</div>
+<div><span class="ts">[3:12 PM]</span> &nbsp;&nbsp;MSKU1234567: SAILING | ETA: 2026-05-05 | Shanghai -> Los Angeles | DELAYED +4 days</div>
+<div><span class="ts">[3:12 PM]</span> Read 10 containers from Excel</div>
+<div><span class="ts">[3:12 PM]</span> Found 10 shipments on ShipsGo</div>
+<div><span class="ts">[3:12 PM]</span> Refreshing...</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="footer-meta">
+        <span class="live">Live data from ShipsGo API</span>
+        <span class="dot-sep">•</span>
+        <span>All times EST</span>
+        <span class="dot-sep">•</span>
+        <span>Refreshes are free &amp; unlimited</span>
+      </div>
+    </section>
+
+    <!-- ═══ SETTINGS ═══ -->
+    <section class="view" id="view-settings">
+      <header class="topbar">
+        <a class="brand" href="#" data-view="dashboard" aria-label="Container Tracker — back to dashboard">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M5 11h2M9 11h2M13 11h2M17 11h2M5 15h2M9 15h2M13 15h2M17 15h2"/></svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Container Tracker</span>
+            <span class="brand-company"></span>
+          </span>
+        </a>
+        <div class="divider" aria-hidden="true"></div>
+        <button class="icon-btn" data-view="dashboard" aria-label="Back to shipments" title="Back to shipments">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="page-title">Settings</div>
+        <div class="spacer"></div>
+        <button class="btn" data-view="dashboard">Cancel</button>
+        <button class="btn btn-primary">Save changes</button>
+      </header>
+
+      <div class="content">
+        <div class="settings">
+          <nav class="settings-nav" aria-label="Settings sections">
+            <a href="#account" class="is-active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Account
+            </a>
+            <a href="#api">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              ShipsGo API
+            </a>
+            <a href="#spreadsheet">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              Linked spreadsheet
+            </a>
+            <a href="#appearance">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+              Appearance
+            </a>
+            <a href="#about">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+              About &amp; help
+            </a>
+          </nav>
+
+          <div>
+            <!-- Account -->
+            <div class="panel">
+              <h3>Account</h3>
+              <p class="panel-desc">Your company name and contact email appear on reports and the app header.</p>
+              <div class="panel-body">
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Company name</label>
+                    <input type="text" id="settings-company" value="" />
+                  </div>
+                  <div class="field">
+                    <label>Contact email</label>
+                    <input type="email" value="ops@acmelogistics.com" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- API key -->
+            <div class="panel">
+              <h3>ShipsGo API key</h3>
+              <p class="panel-desc">Stored securely in Windows Credential Manager — never written to plain text.</p>
+              <div class="panel-body">
+                <div class="field">
+                  <label>API key</label>
+                  <div class="row">
+                    <input type="password" value="••••••••••••••••••••••••••••••••••••" style="flex:1" />
+                    <button class="btn">Show</button>
+                    <button class="btn btn-primary">Test</button>
+                  </div>
+                  <div class="hint">Find your key at <a href="#">shipsgo.com → Dashboard → Integrations → ShipsGo API</a></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Linked spreadsheet -->
+            <div class="panel">
+              <h3>Linked spreadsheet</h3>
+              <p class="panel-desc">Container data is read from and written to this Excel workbook on every refresh.</p>
+              <div class="panel-body">
+                <div class="spreadsheet-card" style="box-shadow:none;border-color:var(--border)">
+                  <div class="xls-icon">XLSX</div>
+                  <div class="meta">
+                    <div class="label">Current file</div>
+                    <div class="path">C:\Users\michael\Documents\Container_Tracking.xlsx</div>
+                  </div>
+                  <div class="actions">
+                    <button class="btn btn-sm">Open in Excel</button>
+                    <button class="btn btn-sm">Change…</button>
+                  </div>
+                </div>
+                <div class="row">
+                  <button class="btn">Create template</button>
+                  <span class="hint">Generates a blank workbook with a "ContainerTracking" Excel Table.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Appearance -->
+            <div class="panel">
+              <h3>Appearance</h3>
+              <div class="panel-body">
+                <div class="setting-row">
+                  <div class="meta"><strong>Dark mode</strong><span>Use a darker palette in low-light environments.</span></div>
+                  <label class="switch"><input type="checkbox" id="dark-toggle-settings" /><span class="switch-track"></span></label>
+                </div>
+                <div class="setting-row">
+                  <div class="meta"><strong>Compact rows</strong><span>Shrink table row height to fit more shipments without scrolling.</span></div>
+                  <label class="switch"><input type="checkbox" /><span class="switch-track"></span></label>
+                </div>
+                <div class="setting-row">
+                  <div class="meta"><strong>Show activity log</strong><span>Display the live event log on the dashboard.</span></div>
+                  <label class="switch"><input type="checkbox" checked /><span class="switch-track"></span></label>
+                </div>
+                <div class="setting-row">
+                  <div class="meta"><strong>Auto-refresh on launch</strong><span>Pull the latest ETAs as soon as the app opens.</span></div>
+                  <label class="switch"><input type="checkbox" /><span class="switch-track"></span></label>
+                </div>
+              </div>
+            </div>
+
+            <!-- About -->
+            <div class="panel">
+              <h3>About</h3>
+              <div class="panel-body">
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 18px;font-size:12px;">
+                  <span class="muted">Version</span><span>Container Tracker v1.0.0 — up to date</span>
+                  <span class="muted">Data folder</span><span><a href="#">%APPDATA%\ContainerTracker</a></span>
+                  <span class="muted">Source</span><span><a href="#">github.com/m-mcohen/container-tracker</a></span>
+                  <span class="muted">Support</span><span>michael@example.com</span>
+                  <span class="muted">Powered by</span><span>ShipsGo API</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
+
+  <!-- ─── Drawer: Container detail ─── -->
+  <div class="drawer-backdrop" id="drawer-backdrop"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-label="Container detail">
+    <div class="drawer-header">
+      <div>
+        <div class="drawer-title" id="drawer-title">MSKU1234567</div>
+        <div class="drawer-sub" id="drawer-sub">MAERSK LINE · MV SEA PIONEER</div>
+      </div>
+      <div class="drawer-close" id="drawer-close" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </div>
+    </div>
+    <div class="drawer-body">
+
+      <div class="hstack" style="flex-wrap: wrap; gap: 8px;">
+        <span class="chip-status sailing" id="drawer-status"><span class="dot"></span>Sailing</span>
+        <span class="chip" id="drawer-delay" style="cursor:default;color: var(--status-delayed);">+4 days late</span>
+        <span class="chip" style="cursor:default">Shanghai → Los Angeles</span>
+      </div>
+
+      <div>
+        <div class="section-label" style="margin-bottom: 8px;">Transit progress</div>
+        <div class="transit" style="min-width: 0;">
+          <div class="transit-bar"><div class="transit-fill sailing" id="drawer-fill" style="width: 42%;"></div></div>
+          <div class="transit-pct" id="drawer-pct">42%</div>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:6px;">Departed Shanghai Apr 12 · ETA Los Angeles May 5</div>
+      </div>
+
+      <div>
+        <div class="section-label" style="margin-bottom: 10px;">Details</div>
+        <div class="detail-grid">
+          <div class="detail-item"><div class="label">Container number</div><div class="value cn" id="drawer-cn">MSKU1234567</div></div>
+          <div class="detail-item"><div class="label">Carrier</div><div class="value">MAERSK LINE (MAEU)</div></div>
+          <div class="detail-item"><div class="label">Vessel</div><div class="value">MV SEA PIONEER</div></div>
+          <div class="detail-item"><div class="label">Voyage</div><div class="value">426W</div></div>
+          <div class="detail-item"><div class="label">Port of loading</div><div class="value">Shanghai, China</div></div>
+          <div class="detail-item"><div class="label">Port of discharge</div><div class="value">Los Angeles, USA</div></div>
+          <div class="detail-item"><div class="label">Original ETA</div><div class="value">2026-05-01</div></div>
+          <div class="detail-item"><div class="label">Current ETA</div><div class="value" style="color: var(--status-delayed); font-weight: 600;">2026-05-05</div></div>
+          <div class="detail-item"><div class="label">Reference</div><div class="value">PO-2024-018</div></div>
+          <div class="detail-item"><div class="label">Last refreshed</div><div class="value">3 min ago</div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label" style="margin-bottom: 10px;">Movement timeline</div>
+        <div class="timeline">
+          <div class="timeline-item done">
+            <div class="event">Gate in · Shanghai</div>
+            <div class="where">Yangshan Terminal, CN</div>
+            <div class="when">Apr 10, 2026 · 09:14 CST</div>
+          </div>
+          <div class="timeline-item done">
+            <div class="event">Loaded on vessel · MV SEA PIONEER</div>
+            <div class="where">Shanghai port of loading</div>
+            <div class="when">Apr 12, 2026 · 18:42 CST</div>
+          </div>
+          <div class="timeline-item current">
+            <div class="event">In transit · Pacific Ocean</div>
+            <div class="where">Approx. 42% of voyage complete</div>
+            <div class="when">Updated 3 min ago</div>
+          </div>
+          <div class="timeline-item">
+            <div class="event">Arrival at Los Angeles</div>
+            <div class="where">APM Terminals, POLB</div>
+            <div class="when">ETA May 5, 2026</div>
+          </div>
+          <div class="timeline-item">
+            <div class="event">Discharge &amp; gate out</div>
+            <div class="when">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hstack" style="justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-danger" id="drawer-remove">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          Stop tracking
+        </button>
+        <button class="btn">View on ShipsGo</button>
+        <button class="btn btn-primary">Refresh now</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── Modal: Add container ─── -->
+  <div class="modal-backdrop" id="modal-add">
+    <div class="modal" role="dialog" aria-labelledby="modal-add-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-add-title">Track a new container</div>
+        <div class="modal-sub">1 ShipsGo credit (~$2 USD) is consumed per new shipment. Refreshes are free.</div>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="f-cn">Container number</label>
+          <input id="f-cn" type="text" value="MSKU1234567" />
+          <div class="hint">11 characters: 4-letter SCAC + 7 digits, e.g. <span style="font-family:var(--font-mono)">MSKU1234567</span></div>
+        </div>
+        <div class="field">
+          <label for="f-carrier">Carrier</label>
+          <select id="f-carrier">
+            <option>MAERSK LINE</option><option>MSC</option><option>CMA CGM</option>
+            <option>HAPAG LLOYD</option><option>COSCO</option><option>EVERGREEN</option>
+            <option>ONE</option><option>YANG MING</option><option>ZIM</option>
+            <option>HMM</option><option>OOCL</option><option>PIL</option><option>OTHER</option>
+          </select>
+        </div>
+        <div class="callout warning">
+          <strong>Heads up:</strong> if this container is already tracked on your ShipsGo account, no credit will be charged.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add &amp; track
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Confirm remove (replaces v1's two messageboxes) ─── -->
+  <div class="modal-backdrop" id="modal-remove">
+    <div class="modal" role="dialog">
+      <div class="modal-header">
+        <div class="modal-title">Stop tracking this container?</div>
+        <div class="modal-sub">This shipment is still active on ShipsGo.</div>
+      </div>
+      <div class="modal-body">
+        <div class="callout">
+          Removing <strong style="font-family:var(--font-mono)" id="remove-cn">MSKU1234567</strong> will hide it from this app. Because it's still active, ShipsGo will return it on the next refresh and it will reappear here. To permanently dismiss, wait until the shipment is discharged or delivered.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-danger">Remove from app</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<script src="app.js"></script>
 </body>
 </html>
