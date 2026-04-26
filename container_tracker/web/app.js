@@ -140,17 +140,22 @@
    * ──────────────────────────────────────────────────────────────────── */
   let ROWS = [];
 
-  // Status → CSS chip class (mirrors v1 normalize_status logic)
+  // Status → CSS chip class. Lookup dict + one overlay rule for the
+  // delayed-while-sailing case (a SAILING voyage with positive delay
+  // renders as "delayed" so it stands out in the table).
+  // Unknown statuses fall through to "untracked" (neutral gray).
+  const STATUS_TO_CLASS = {
+    SAILING:    "sailing",
+    ARRIVED:    "arrived",
+    DISCHARGED: "discharged",
+    DELIVERED:  "delivered",
+    GATE_OUT:   "gateout",
+    BOOKED:     "booked",
+  };
   function statusClass(row) {
     const s = (row.status || "").toUpperCase();
     if (s === "SAILING" && row.delayVal > 0) return "delayed";
-    if (s === "SAILING") return "sailing";
-    if (s === "ARRIVED") return "arrived";
-    if (s === "DISCHARGED") return "discharged";
-    if (s === "DELIVERED") return "delivered";
-    if (s === "GATE_OUT") return "gateout";
-    if (s === "BOOKED") return "booked";
-    return "untracked";
+    return STATUS_TO_CLASS[s] || "untracked";
   }
   function statusLabel(row) {
     const cls = statusClass(row);

@@ -30,13 +30,13 @@
     /* Status chips — derived from v1 LIGHT theme */
     --status-sailing:    #0D47A1;
     --status-sailing-bg: #DBEAFE;
-    --status-arrived:    #15803D;
-    --status-arrived-bg: #DCFCE7;
+    --status-arrived:    #0D9488;
+    --status-arrived-bg: #CCFBF1;
     --status-delayed:    #B91C1C;
     --status-delayed-bg: #FEE2E2;
-    --status-discharged: #1E40AF;
-    --status-discharged-bg: #DBEAFE;
-    --status-delivered:  #166534;
+    --status-discharged: #16A34A;
+    --status-discharged-bg: #DCFCE7;
+    --status-delivered:  #15803D;
     --status-delivered-bg: #D1FAE5;
     --status-gateout:    #047857;
     --status-gateout-bg: #D1FAE5;
@@ -90,14 +90,14 @@
 
     --status-sailing:    #64B5F6;
     --status-sailing-bg: #1A2A3A;
-    --status-arrived:    #66BB6A;
-    --status-arrived-bg: #1A3A24;
+    --status-arrived:    #5EEAD4;
+    --status-arrived-bg: #0F2A2A;
     --status-delayed:    #EF5350;
     --status-delayed-bg: #3A1A1A;
-    --status-discharged: #82B1FF;
-    --status-discharged-bg: #1A2A3A;
-    --status-delivered:  #81C784;
-    --status-delivered-bg: #1A3A24;
+    --status-discharged: #86EFAC;
+    --status-discharged-bg: #0F2A19;
+    --status-delivered:  #6EE7B7;
+    --status-delivered-bg: #0F2A19;
     --status-gateout:    #4DD0E1;
     --status-gateout-bg: #1A2E2E;
     --status-booked:     #FFB74D;
