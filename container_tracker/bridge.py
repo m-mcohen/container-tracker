@@ -451,7 +451,17 @@ class Bridge:
                     "was_existing": False, "container": None,
                     "excel_write_failed": False}
 
-        scac = resolve_scac(carrier or "")
+        # Blank carrier → tell ShipsGo "OTHERS" so the request still goes
+        # through (ShipsGo accepts OTHERS as a generic SCAC). The record's
+        # own scac stays empty until refresh — we don't want "OTHERS"
+        # rendered as the carrier badge.
+        carrier_clean = (carrier or "").strip()
+        if carrier_clean:
+            scac = resolve_scac(carrier_clean)
+            record_scac = scac
+        else:
+            scac = "OTHERS"
+            record_scac = ""
         client = ShipsGoClient(token)
         try:
             resp = client.create_shipment(container_number=cn_up,
@@ -473,8 +483,8 @@ class Bridge:
         rec = {
             "shipment_id": sid,
             "container_number": cn_up,
-            "carrier": carrier or "",
-            "scac": scac,
+            "carrier": carrier_clean,
+            "scac": record_scac,
             "status": "",
             "vessel": "",
             "pol": "",
@@ -495,7 +505,7 @@ class Bridge:
         if excel_path and Path(excel_path).exists():
             try:
                 append_container_row(excel_path, cn_up,
-                                     carrier=carrier or "", status="NEW")
+                                     carrier=carrier_clean, status="NEW")
             except Exception as e:
                 logger.warning("add_container: excel append failed: %s", e)
                 excel_write_failed = True

@@ -420,6 +420,30 @@ def test_add_container_creates_record_and_calls_create_shipment(
     assert save_spy["tracking_writes"] == 1
 
 
+def test_add_container_blank_carrier_sends_OTHERS(
+        isolated_data_dir, monkeypatch, patched_token):
+    """Blank carrier from the modal placeholder → ShipsGo gets the
+    generic 'OTHERS' SCAC, and the stored record keeps carrier/scac
+    empty so the carrier-badge column doesn't display 'OTHERS'."""
+    factory = _FakeShipsGoClient.factory(create_response={"id": "abc"})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().add_container("MSKU1234567", "")
+
+    assert result["ok"] is True
+    # The API call uses OTHERS …
+    assert factory.captured["instance"].create_calls == [
+        {"container_number": "MSKU1234567", "carrier_scac": "OTHERS"},
+    ]
+    # … but the stored record stays clean so the UI doesn't render it.
+    db = ct_config.load_tracking_db()
+    assert db["MSKU1234567"]["carrier"] == ""
+    assert db["MSKU1234567"]["scac"] == ""
+    # And the JS-side row reflects the same.
+    assert result["container"]["carrier"] == ""
+    assert result["container"]["scac"] == ""
+
+
 def test_add_container_invalid_length(isolated_data_dir, monkeypatch,
                                        patched_token):
     factory = _FakeShipsGoClient.factory()
