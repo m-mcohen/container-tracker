@@ -2,7 +2,11 @@
 name = "container-tracker"
 version = "1.0.0"
 description = "Track ocean shipping containers via ShipsGo API and sync to Excel."
-requires-python = ">=3.10"
+# Python 3.12 is the supported development and build target. Pinned because
+# pywebview's Windows backend depends on pythonnet, which (as of this writing)
+# has no stable wheel for Python 3.13+. Re-evaluate the upper bound once
+# pythonnet ships wheels for newer Python versions.
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "requests",
     "openpyxl",

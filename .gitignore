@@ -16,6 +16,13 @@ __pycache__/
 .env
 config.json
 
+# Virtual environments
+.venv/
+venv/
+
+# Editable-install metadata
+*.egg-info/
+
 # OS junk
 Thumbs.db
 desktop.ini
