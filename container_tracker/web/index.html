@@ -26,7 +26,7 @@
           </span>
         </a>
         <div class="divider" aria-hidden="true"></div>
-        <div class="page-title">Shipments <span class="muted" id="title-count">· 10 tracked</span></div>
+        <div class="page-title">Shipments <span class="muted" id="title-count">· 0 tracked</span></div>
         <div class="spacer"></div>
         <div class="search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -90,33 +90,33 @@
         <div class="stats">
           <div class="stat">
             <div class="stat-label"><span class="dot"></span>Tracked</div>
-            <div class="stat-number">10</div>
-            <div class="stat-sub">Across <strong>8 carriers</strong></div>
+            <div class="stat-number" id="kpi-tracked">0</div>
+            <div class="stat-sub" id="kpi-tracked-sub"></div>
           </div>
           <div class="stat is-sailing">
             <div class="stat-label"><span class="dot"></span>Sailing</div>
-            <div class="stat-number">5</div>
-            <div class="stat-sub">Avg. transit <strong>54%</strong></div>
+            <div class="stat-number" id="kpi-sailing">0</div>
+            <div class="stat-sub" id="kpi-sailing-sub"></div>
           </div>
           <div class="stat is-arrived">
             <div class="stat-label"><span class="dot"></span>Arrived</div>
-            <div class="stat-number">4</div>
-            <div class="stat-sub"><strong>+1</strong> this week</div>
+            <div class="stat-number" id="kpi-arrived">0</div>
+            <div class="stat-sub" id="kpi-arrived-sub"></div>
           </div>
           <div class="stat is-delayed">
             <div class="stat-label"><span class="dot"></span>Delayed</div>
-            <div class="stat-number">2</div>
-            <div class="stat-sub">Longest <strong>+7 days</strong></div>
+            <div class="stat-number" id="kpi-delayed">0</div>
+            <div class="stat-sub" id="kpi-delayed-sub"></div>
           </div>
         </div>
 
         <!-- Toolbar -->
         <div class="toolbar" role="toolbar" aria-label="Filter shipments by status">
-          <button type="button" class="chip is-active" data-filter="all" aria-pressed="true">All <span class="count">10</span></button>
-          <button type="button" class="chip" data-filter="delayed" aria-pressed="false">Delayed <span class="count">2</span></button>
-          <button type="button" class="chip" data-filter="sailing" aria-pressed="false">Sailing <span class="count">5</span></button>
-          <button type="button" class="chip" data-filter="arrived" aria-pressed="false">Arrived <span class="count">4</span></button>
-          <button type="button" class="chip" data-filter="booked" aria-pressed="false">Booked <span class="count">1</span></button>
+          <button type="button" class="chip is-active" data-filter="all" aria-pressed="true">All <span class="count" id="chip-count-all">0</span></button>
+          <button type="button" class="chip" data-filter="delayed" aria-pressed="false">Delayed <span class="count" id="chip-count-delayed">0</span></button>
+          <button type="button" class="chip" data-filter="sailing" aria-pressed="false">Sailing <span class="count" id="chip-count-sailing">0</span></button>
+          <button type="button" class="chip" data-filter="arrived" aria-pressed="false">Arrived <span class="count" id="chip-count-arrived">0</span></button>
+          <button type="button" class="chip" data-filter="booked" aria-pressed="false">Booked <span class="count" id="chip-count-booked">0</span></button>
           <div class="spacer"></div>
           <span class="refresh-meta">Last refreshed <span class="time" id="last-refresh"></span></span>
         </div>
@@ -142,7 +142,7 @@
             <tbody id="shipments-tbody"></tbody>
           </table>
           <div class="table-footer">
-            <span>Showing <strong id="row-count">10</strong> of <strong>10</strong> containers</span>
+            <span>Showing <strong id="row-count">0</strong> of <strong id="row-total">0</strong> containers</span>
             <div class="spacer"></div>
             <span class="muted">Sorted by <strong>Status</strong> (delayed first)</span>
           </div>
@@ -369,7 +369,7 @@
           <div class="detail-item"><div class="label">Original ETA</div><div class="value">2026-05-01</div></div>
           <div class="detail-item"><div class="label">Current ETA</div><div class="value" style="color: var(--status-delayed); font-weight: 600;">2026-05-05</div></div>
           <div class="detail-item"><div class="label">Reference</div><div class="value">PO-2024-018</div></div>
-          <div class="detail-item"><div class="label">Last refreshed</div><div class="value">3 min ago</div></div>
+          <div class="detail-item"><div class="label">Last refreshed</div><div class="value" id="drawer-last-refresh">—</div></div>
         </div>
       </div>
 

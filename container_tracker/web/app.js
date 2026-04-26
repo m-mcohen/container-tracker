@@ -57,12 +57,23 @@
     LAST_REFRESH_AT = Date.now();
     updateLastRefresh();
   }
+  // Single relative-time formatter for both the session-level refresh
+  // timestamp (millis from Date.now()) and per-row last_refreshed (ISO
+  // string). Callers must convert to millis at the boundary.
+  function formatRelativeMs(ms) {
+    if (!Number.isFinite(ms)) return "—";
+    const diffMin = Math.max(0, Math.round((Date.now() - ms) / 60000));
+    return diffMin < 1 ? "just now" : `${diffMin} min ago`;
+  }
+  function parseIsoMs(iso) {
+    if (!iso) return NaN;
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? t : NaN;
+  }
   function updateLastRefresh() {
     const el = document.getElementById("last-refresh");
     if (!el) return;
-    if (!LAST_REFRESH_AT) { el.textContent = "—"; return; }
-    const diffMin = Math.max(0, Math.round((Date.now() - LAST_REFRESH_AT) / 60000));
-    el.textContent = diffMin < 1 ? "just now" : `${diffMin} min ago`;
+    el.textContent = formatRelativeMs(LAST_REFRESH_AT);
   }
   // Keep the indicator roughly current if the user leaves the app idle.
   setInterval(updateLastRefresh, 30000);
@@ -105,7 +116,50 @@
 
   let activeFilter = "all";
 
+  // Setting helper used by renderStats + drawer.
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  // Recompute header / KPI / chip-count / footer-total from ROWS.
+  // "Delayed" cross-cuts other buckets — a SAILING row with delayVal>0
+  // counts in both Sailing and Delayed. Matches statusClass() semantics.
+  // Three of four KPI subtitles are intentionally blank for now; only
+  // kpi-tracked-sub ("Across N carriers") is wired.
+  function renderStats() {
+    const total = ROWS.length;
+    const sailing = ROWS.filter(r => r.status === "SAILING").length;
+    const arrived = ROWS.filter(r => r.status === "ARRIVED" || r.status === "DISCHARGED").length;
+    // `> 0` is load-bearing: Number(null) coerces to 0 and Number(undefined) to NaN,
+    // both of which fail `> 0` correctly. Switching to `>= 0` would count nulls as delayed.
+    const delayed = ROWS.filter(r => Number(r.delayVal) > 0).length;
+    const booked  = ROWS.filter(r => r.status === "BOOKED").length;
+
+    setText("title-count", `· ${total} tracked`);
+
+    setText("kpi-tracked", String(total));
+    setText("kpi-sailing", String(sailing));
+    setText("kpi-arrived", String(arrived));
+    setText("kpi-delayed", String(delayed));
+
+    const carriers = new Set(ROWS.map(r => r.carrier).filter(Boolean)).size;
+    setText("kpi-tracked-sub", carriers ? `Across ${carriers} carrier${carriers === 1 ? "" : "s"}` : "");
+    setText("kpi-sailing-sub", "");
+    setText("kpi-arrived-sub", "");
+    setText("kpi-delayed-sub", "");
+
+    setText("chip-count-all", String(total));
+    setText("chip-count-delayed", String(delayed));
+    setText("chip-count-sailing", String(sailing));
+    setText("chip-count-arrived", String(arrived));
+    setText("chip-count-booked", String(booked));
+
+    setText("row-total", String(total));
+  }
+
   function render() {
+    renderStats();
     const q = (document.getElementById("search").value || "").toUpperCase();
     const filtered = ROWS
       .filter(r => {
@@ -239,6 +293,7 @@
     if (row.pct === null) { fill.style.width = "0%"; pct.textContent = "—"; }
     else { fill.style.width = row.pct + "%"; fill.className = `transit-fill ${cls}`; pct.textContent = row.pct + "%"; }
     document.getElementById("drawer-cn").textContent = row.cn;
+    setText("drawer-last-refresh", formatRelativeMs(parseIsoMs(row.last_refreshed)));
     app.classList.add("drawer-open");
   });
   document.getElementById("drawer-close").addEventListener("click", () => app.classList.remove("drawer-open"));
