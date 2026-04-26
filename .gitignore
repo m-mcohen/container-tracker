@@ -8,6 +8,13 @@ dist/
 # Delivery folder (compiled installers)
 delivery/
 
+# Inno Setup installer artifacts (the project root sometimes ends up
+# with a freshly-built one alongside dist/installer/)
+ContainerTracker_Setup_*.exe
+
+# Claude Code local config (machine-specific)
+.claude/
+
 # Python cache
 __pycache__/
 *.py[cod]

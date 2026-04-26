@@ -1,0 +1,1799 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1280" />
+<title>Container Tracker — Redesign Mockup</title>
+<style>
+  /* ─── Design tokens ──────────────────────────────────────────────── */
+  :root {
+    /* Surfaces — warm bone keeps continuity with v1 tkinter LIGHT["bg"] */
+    --surface-base:    #ECEAE5;
+    --surface-card:    #FFFFFF;
+    --surface-subtle:  #F4F2EC;
+    --surface-hover:   #E5E3DD;
+    --surface-sidebar: #E5E3DD;
+    --surface-input:   #F7F6F3;
+
+    /* Borders */
+    --border:          #D0CEC8;
+    --border-subtle:   #DBD9D2;
+    --border-strong:   #BFBDB5;
+
+    /* Text */
+    --text-primary:    #111111;
+    --text-secondary:  #333333;
+    --text-tertiary:   #666666;
+    --text-hint:       #777777;
+    --text-on-accent:  #FFFFFF;
+
+    /* Brand — matches v1 ACCENT */
+    --accent:          #2563eb;
+    --accent-hover:    #1D4ED8;
+    --accent-active:   #1E40AF;
+    --accent-subtle:   #DBEAFE;
+    --accent-ring:     rgba(37,99,235,0.22);
+
+    /* Status chips — derived from v1 LIGHT theme */
+    --status-sailing:    #0D47A1;
+    --status-sailing-bg: #DBEAFE;
+    --status-arrived:    #15803D;
+    --status-arrived-bg: #DCFCE7;
+    --status-delayed:    #B91C1C;
+    --status-delayed-bg: #FEE2E2;
+    --status-discharged: #1E40AF;
+    --status-discharged-bg: #DBEAFE;
+    --status-delivered:  #166534;
+    --status-delivered-bg: #D1FAE5;
+    --status-gateout:    #047857;
+    --status-gateout-bg: #D1FAE5;
+    --status-booked:     #92400E;
+    --status-booked-bg:  #FEF3C7;
+    --status-untracked:  #525252;
+    --status-untracked-bg: #E5E7EB;
+
+    /* Typography */
+    --font-primary: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono:    "Cascadia Code", "Consolas", ui-monospace, monospace;
+
+    /* Radii */
+    --r-input: 8px;
+    --r-btn:   8px;
+    --r-card:  12px;
+    --r-pill:  999px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(17,17,17,0.04);
+    --shadow-md: 0 4px 12px rgba(17,17,17,0.06), 0 1px 2px rgba(17,17,17,0.04);
+    --shadow-lg: 0 12px 32px rgba(17,17,17,0.10), 0 4px 8px rgba(17,17,17,0.04);
+
+    /* Layout */
+    --header-h: 60px;
+  }
+
+  /* Dark mode (matches v1 DARK palette structure) */
+  [data-theme="dark"] {
+    --surface-base:    #1A1A1F;
+    --surface-card:    #242429;
+    --surface-subtle:  #1E1E24;
+    --surface-hover:   #2A2A30;
+    --surface-sidebar: #1E1E24;
+    --surface-input:   #1E1E24;
+
+    --border:          #3A3A42;
+    --border-subtle:   #2E2E36;
+    --border-strong:   #50505A;
+
+    --text-primary:    #F0EDE8;
+    --text-secondary:  #CCCCCC;
+    --text-tertiary:   #A0A0A0;
+    --text-hint:       #888888;
+
+    --accent:          #2563eb;
+    --accent-hover:    #1D4ED8;
+    --accent-active:   #1E40AF;
+    --accent-subtle:   #1E2A44;
+    --accent-ring:     rgba(37,99,235,0.30);
+
+    --status-sailing:    #64B5F6;
+    --status-sailing-bg: #1A2A3A;
+    --status-arrived:    #66BB6A;
+    --status-arrived-bg: #1A3A24;
+    --status-delayed:    #EF5350;
+    --status-delayed-bg: #3A1A1A;
+    --status-discharged: #82B1FF;
+    --status-discharged-bg: #1A2A3A;
+    --status-delivered:  #81C784;
+    --status-delivered-bg: #1A3A24;
+    --status-gateout:    #4DD0E1;
+    --status-gateout-bg: #1A2E2E;
+    --status-booked:     #FFB74D;
+    --status-booked-bg:  #2E2418;
+    --status-untracked:  #9CA3AF;
+    --status-untracked-bg: #2A2A30;
+  }
+
+  /* ─── Base ──────────────────────────────────────────────────────── */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-primary);
+    font-size: 14px;
+    color: var(--text-primary);
+    background: var(--surface-base);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  button { font-family: inherit; }
+  a { color: inherit; }
+  ::selection { background: var(--accent-subtle); }
+
+  /* Defensive default for inline SVGs without an explicit size or class rule.
+     Every parent-scoped rule below overrides this via specificity. */
+  svg { width: 16px; height: 16px; flex: none; }
+
+  /* App chrome — single column, no sidebar */
+  .app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── Brand block (in topbar) ───────────────────────────────────── */
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
+    border-radius: var(--r-btn);
+  }
+  .brand:hover .brand-name { color: var(--accent); }
+  .brand:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+  .brand-mark {
+    width: 32px; height: 32px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: #fff;
+    display: grid; place-items: center;
+    box-shadow: var(--shadow-sm);
+    flex: none;
+  }
+  .brand-mark svg { width: 18px; height: 18px; }
+  .brand-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+  .brand-name {
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    transition: color .12s;
+  }
+  .brand-company {
+    font-size: 11px;
+    color: var(--text-hint);
+    margin-top: 1px;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar {
+    height: var(--header-h);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface-base);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .topbar .divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    margin: 0 4px;
+    flex: none;
+  }
+  .page-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+  .page-title .muted { color: var(--text-tertiary); font-weight: 500; margin-left: 4px; font-size: 12px; }
+  .topbar .spacer { flex: 1; }
+  .search {
+    position: relative;
+    width: 320px;
+  }
+  .search input {
+    width: 100%;
+    height: 34px;
+    padding: 0 12px 0 34px;
+    border-radius: var(--r-input);
+    border: 1px solid var(--border);
+    background: var(--surface-card);
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .search input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+  .search svg { position: absolute; left: 10px; top: 9px; width: 16px; height: 16px; color: var(--text-tertiary); }
+  .kbd {
+    position: absolute; right: 8px; top: 7px;
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--text-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    background: var(--surface-input);
+  }
+
+  .icon-btn {
+    width: 34px; height: 34px;
+    display: grid; place-items: center;
+    border-radius: var(--r-btn);
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+  }
+  .icon-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .icon-btn svg { width: 17px; height: 17px; }
+  .icon-btn.is-active { background: var(--accent-subtle); color: var(--accent); }
+
+  .theme-switch {
+    width: 44px; height: 22px;
+    background: var(--border);
+    border-radius: var(--r-pill);
+    position: relative;
+    cursor: pointer;
+    transition: background .15s;
+    flex: none;
+    border: none;
+    padding: 0;
+    appearance: none;
+  }
+  .theme-switch::after {
+    content: ""; position: absolute; left: 2px; top: 2px;
+    width: 18px; height: 18px;
+    background: #FFFFFF;
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+    transition: transform .15s;
+  }
+  .theme-switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+  [data-theme="dark"] .theme-switch { background: var(--accent); }
+  [data-theme="dark"] .theme-switch::after { transform: translateX(22px); }
+
+  /* Buttons */
+  .btn {
+    height: 34px;
+    padding: 0 14px;
+    border-radius: var(--r-btn);
+    border: 1px solid var(--border);
+    background: var(--surface-card);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface-hover); }
+  .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); border-color: var(--accent); }
+  .btn svg { width: 15px; height: 15px; }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--text-on-accent);
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-primary:active { background: var(--accent-active); }
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+  }
+  .btn-ghost:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .btn-danger {
+    border-color: var(--status-delayed);
+    color: var(--status-delayed);
+    background: transparent;
+  }
+  .btn-danger:hover { background: var(--status-delayed-bg); }
+  .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+
+  .content {
+    padding: 20px 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* Notification stack — holds banner + inline notices in one column */
+  .notifications {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Update banner */
+  .banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: var(--r-card);
+    background: var(--accent-subtle);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 13px;
+    box-shadow: var(--shadow-sm);
+  }
+  .banner .pill {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: var(--r-pill);
+    text-transform: uppercase;
+  }
+  .banner a { font-weight: 600; text-decoration: none; }
+  .banner a:hover { text-decoration: underline; }
+  .banner .dismiss {
+    margin-left: auto;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font: inherit;
+    font-size: 16px;
+    line-height: 1;
+  }
+  .banner .dismiss:hover { background: rgba(37,99,235,0.10); }
+  .banner .dismiss:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+
+  /* Inline notice (for unmatched containers) */
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--r-card);
+    background: var(--status-booked-bg);
+    border: 1px solid color-mix(in srgb, var(--status-booked) 25%, transparent);
+    color: var(--status-booked);
+    font-size: 13px;
+  }
+  .notice-body { flex: 1; }
+  .notice-body strong { font-weight: 700; }
+  .notice-actions { display: flex; gap: 6px; flex: none; }
+
+  /* Stats */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .stat {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-card);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .stat::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: var(--border);
+  }
+  .stat.is-sailing::before { background: var(--status-sailing); }
+  .stat.is-arrived::before { background: var(--status-arrived); }
+  .stat.is-delayed::before { background: var(--status-delayed); }
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stat-label .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-hint);
+  }
+  .stat.is-sailing .dot { background: var(--status-sailing); }
+  .stat.is-arrived .dot { background: var(--status-arrived); }
+  .stat.is-delayed .dot { background: var(--status-delayed); }
+  .stat-number {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--text-primary);
+  }
+  .stat.is-sailing .stat-number { color: var(--status-sailing); }
+  .stat.is-arrived .stat-number { color: var(--status-arrived); }
+  .stat.is-delayed .stat-number { color: var(--status-delayed); }
+  .stat-sub {
+    font-size: 11px;
+    color: var(--text-hint);
+  }
+  .stat-sub strong { color: var(--text-secondary); font-weight: 600; }
+
+  /* Linked spreadsheet card (slimmer than v1, but same affordances) */
+  .spreadsheet-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-card);
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+  .xls-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: var(--status-arrived-bg);
+    color: var(--status-arrived);
+    display: grid; place-items: center;
+    font-weight: 700;
+    font-size: 11px;
+    flex: none;
+  }
+  .spreadsheet-card .meta { flex: 1; min-width: 0; }
+  .spreadsheet-card .label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  .spreadsheet-card .path {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 2px;
+  }
+  .spreadsheet-card .actions { display: flex; gap: 6px; flex: none; }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    height: 30px;
+    padding: 0 12px;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--border);
+    background: var(--surface-card);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+    user-select: none;
+  }
+  .chip:hover { background: var(--surface-hover); }
+  .chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); border-color: var(--accent); }
+  .chip.is-active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .chip .count {
+    font-size: 11px;
+    background: var(--surface-input);
+    color: var(--text-tertiary);
+    border-radius: var(--r-pill);
+    padding: 0 6px;
+    line-height: 16px;
+  }
+  .chip.is-active .count { background: rgba(255,255,255,0.20); color: #fff; }
+
+  .toolbar .spacer { flex: 1; }
+  .refresh-meta { font-size: 11px; color: var(--text-hint); }
+  .refresh-meta .time { color: var(--text-tertiary); font-weight: 500; }
+
+  /* Card wrapping table */
+  .card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-card);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Table */
+  table.shipments {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  table.shipments thead th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    background: var(--surface-subtle);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+  table.shipments thead th.sortable { cursor: pointer; }
+  table.shipments thead th.sortable::after {
+    content: " ↕";
+    color: var(--border-strong);
+    font-size: 10px;
+    margin-left: 2px;
+  }
+  table.shipments thead th.sorted::after {
+    content: " ↑";
+    color: var(--accent);
+  }
+  table.shipments tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+    color: var(--text-primary);
+  }
+  table.shipments tbody tr:last-child td { border-bottom: none; }
+  table.shipments tbody tr { cursor: pointer; transition: background .1s; }
+  table.shipments tbody tr:hover { background: var(--surface-subtle); }
+  table.shipments tbody tr.is-selected { background: var(--accent-subtle); }
+
+  .cn {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .carrier {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .carrier-badge {
+    width: 22px; height: 22px;
+    border-radius: 5px;
+    display: grid; place-items: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.02em;
+    flex: none;
+  }
+  .c-MAEU { background: #0A3D7A; }
+  .c-MSCU { background: #1D4486; }
+  .c-CMDU { background: #8B1E3F; }
+  .c-HLCU { background: #D97706; }
+  .c-COSU { background: #A61E28; }
+  .c-EGLV { background: #0E7A4C; }
+  .c-ONEY { background: #E6389C; }
+  .c-ZIMU { background: #1F6FB2; }
+  .c-YMLU { background: #B45309; }
+  .c-HDMU { background: #4338CA; }
+  .c-OOLU { background: #BE123C; }
+  .c-PILU { background: #0F766E; }
+  .c-OTHER { background: #525252; }
+
+  /* Status chips */
+  .chip-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: var(--r-pill);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+  .chip-status .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .chip-status.sailing    { background: var(--status-sailing-bg);    color: var(--status-sailing); }
+  .chip-status.sailing .dot { background: var(--status-sailing); }
+  .chip-status.arrived    { background: var(--status-arrived-bg);    color: var(--status-arrived); }
+  .chip-status.arrived .dot { background: var(--status-arrived); }
+  .chip-status.delayed    { background: var(--status-delayed-bg);    color: var(--status-delayed); }
+  .chip-status.delayed .dot { background: var(--status-delayed); }
+  .chip-status.discharged { background: var(--status-discharged-bg); color: var(--status-discharged); }
+  .chip-status.discharged .dot { background: var(--status-discharged); }
+  .chip-status.delivered  { background: var(--status-delivered-bg);  color: var(--status-delivered); }
+  .chip-status.delivered .dot { background: var(--status-delivered); }
+  .chip-status.gateout    { background: var(--status-gateout-bg);    color: var(--status-gateout); }
+  .chip-status.gateout .dot { background: var(--status-gateout); }
+  .chip-status.booked     { background: var(--status-booked-bg);     color: var(--status-booked); }
+  .chip-status.booked .dot { background: var(--status-booked); }
+  .chip-status.untracked  { background: var(--status-untracked-bg);  color: var(--status-untracked); }
+  .chip-status.untracked .dot { background: var(--status-untracked); }
+
+  .delay-pos { color: var(--status-delayed); font-weight: 600; }
+  .delay-neg { color: var(--status-arrived); font-weight: 600; }
+  .delay-neutral { color: var(--text-hint); }
+
+  .route {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+  .route .arrow { color: var(--text-hint); font-size: 12px; }
+
+  .transit {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 110px;
+  }
+  .transit-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--surface-input);
+    border-radius: var(--r-pill);
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+  }
+  .transit-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: inherit;
+    transition: width .3s ease;
+  }
+  .transit-fill.sailing  { background: var(--status-sailing); }
+  .transit-fill.arrived,
+  .transit-fill.delivered,
+  .transit-fill.gateout,
+  .transit-fill.discharged { background: var(--status-arrived); }
+  .transit-fill.delayed  { background: var(--status-delayed); }
+  .transit-pct {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    width: 34px;
+    text-align: right;
+  }
+
+  .row-actions {
+    display: inline-flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity .1s;
+  }
+  tr:hover .row-actions { opacity: 1; }
+  .row-action {
+    width: 26px; height: 26px;
+    display: grid; place-items: center;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+  }
+  .row-action:hover { background: var(--surface-base); color: var(--text-primary); border-color: var(--border-subtle); }
+  .row-action svg { width: 14px; height: 14px; }
+
+  .table-footer {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--surface-subtle);
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+  .table-footer .spacer { flex: 1; }
+
+  /* Activity log panel (collapsible bottom drawer) */
+  .activity-panel {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-card);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .activity-header {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--surface-subtle);
+    border: none;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+  }
+  .activity-header:hover { background: var(--surface-hover); }
+  .activity-header:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+  .activity-panel.is-collapsed .activity-header { border-bottom: none; }
+  .activity-header .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    color: var(--text-tertiary);
+  }
+  .activity-header .spacer { flex: 1; }
+  .activity-header .toggle {
+    color: var(--text-hint);
+    transition: transform .15s;
+  }
+  .activity-panel.is-collapsed .activity-body { display: none; }
+  .activity-panel.is-collapsed .toggle { transform: rotate(-90deg); }
+  .activity-body {
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    max-height: 180px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+  .activity-body .ts { color: var(--text-hint); }
+  .activity-body .err { color: var(--status-delayed); }
+  .activity-body .ok { color: var(--status-arrived); }
+
+  /* Footer */
+  .footer-meta {
+    padding: 0 24px 18px;
+    font-size: 11px;
+    color: var(--text-hint);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .footer-meta .dot-sep { opacity: .4; }
+  .footer-meta .live {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--status-arrived);
+  }
+  .footer-meta .live::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--status-arrived);
+    box-shadow: 0 0 0 3px var(--status-arrived-bg);
+  }
+
+  /* ─── Drawer (Container detail) ─── */
+  .drawer-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(17,17,17,0.32);
+    display: none;
+    z-index: 40;
+  }
+  .drawer {
+    position: fixed;
+    top: 0; right: 0;
+    height: 100vh;
+    width: 520px;
+    max-width: 92vw;
+    background: var(--surface-base);
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    z-index: 41;
+    display: none;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform .2s ease;
+  }
+  .app.drawer-open .drawer-backdrop { display: block; }
+  .app.drawer-open .drawer { display: flex; transform: translateX(0); }
+
+  .drawer-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .drawer-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    font-family: var(--font-mono);
+  }
+  .drawer-sub {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 3px;
+  }
+  .drawer-close {
+    margin-left: auto;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    border: 1px solid transparent;
+  }
+  .drawer-close:hover { background: var(--surface-subtle); color: var(--text-primary); }
+  .drawer-close svg { width: 16px; height: 16px; }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    color: var(--text-hint);
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 20px;
+  }
+  .detail-item .label {
+    font-size: 11px;
+    color: var(--text-hint);
+    margin-bottom: 2px;
+  }
+  .detail-item .value {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  /* Timeline */
+  .timeline {
+    position: relative;
+    padding-left: 24px;
+  }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 7px; top: 6px; bottom: 6px;
+    width: 2px;
+    background: var(--border);
+  }
+  .timeline-item { position: relative; padding: 4px 0 12px; }
+  .timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -21px;
+    top: 8px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--surface-card);
+    border: 2px solid var(--border);
+  }
+  .timeline-item.done::before { border-color: var(--status-arrived); background: var(--status-arrived); }
+  .timeline-item.current::before { border-color: var(--status-sailing); background: var(--surface-card); box-shadow: 0 0 0 3px var(--status-sailing-bg); }
+  .timeline-item .event { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .timeline-item .when { font-size: 11px; color: var(--text-hint); margin-top: 2px; }
+  .timeline-item .where { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+
+  /* ─── Modals ─── */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(17,17,17,0.40);
+    display: none;
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+  }
+  .app.modal-add-open #modal-add { display: flex; }
+  .app.modal-remove-open #modal-remove { display: flex; }
+  .modal {
+    width: 460px;
+    max-width: calc(100vw - 48px);
+    background: var(--surface-base);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+  .modal-header { padding: 18px 22px 14px; border-bottom: 1px solid var(--border-subtle); }
+  .modal-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+  .modal-sub { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+  .modal-body { padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .modal-footer {
+    padding: 14px 22px 18px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    background: var(--surface-subtle);
+  }
+
+  /* Form fields */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+  .field .hint { font-size: 11px; color: var(--text-hint); }
+  .field .error { font-size: 11px; color: var(--status-delayed); display: flex; align-items: center; gap: 4px; }
+  .field.invalid input,
+  .field.invalid select { border-color: var(--status-delayed); box-shadow: 0 0 0 3px rgba(185,28,28,0.15); }
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  select {
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--r-input);
+    border: 1px solid var(--border);
+    background: var(--surface-card);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 34px;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .callout {
+    font-size: 12px;
+    padding: 10px 12px;
+    border-radius: var(--r-btn);
+    border: 1px dashed var(--border);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+  }
+  .callout.warning {
+    background: var(--status-booked-bg);
+    border-color: color-mix(in srgb, var(--status-booked) 30%, transparent);
+    border-style: solid;
+    color: var(--status-booked);
+  }
+
+  /* ─── Settings ─── */
+  .settings {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  .settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: sticky;
+    top: calc(var(--header-h) + 16px);
+  }
+  .settings-nav a {
+    padding: 8px 10px;
+    border-radius: var(--r-btn);
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 500;
+  }
+  .settings-nav a:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .settings-nav a:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+  .settings-nav a.is-active {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+  .settings-nav a svg { width: 15px; height: 15px; color: var(--text-hint); }
+  .settings-nav a.is-active svg { color: var(--accent); }
+
+  .panel {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-card);
+    padding: 20px 22px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .panel h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+  .panel .panel-desc { font-size: 12px; color: var(--text-tertiary); margin-bottom: 16px; }
+  .panel .panel-body { display: flex; flex-direction: column; gap: 14px; }
+
+  .row { display: flex; align-items: center; gap: 10px; }
+
+  .switch { position: relative; width: 36px; height: 20px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch-track {
+    position: absolute; inset: 0;
+    background: var(--border);
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .switch-track::after {
+    content: ""; position: absolute; left: 2px; top: 2px;
+    width: 16px; height: 16px; background: var(--surface-card); border-radius: 50%;
+    box-shadow: var(--shadow-sm); transition: transform .15s;
+  }
+  .switch input:checked + .switch-track { background: var(--accent); }
+  .switch input:checked + .switch-track::after { transform: translateX(16px); }
+
+  .setting-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-row .meta { flex: 1; }
+  .setting-row .meta strong { font-size: 13px; font-weight: 600; display: block; margin-bottom: 2px; color: var(--text-primary); }
+  .setting-row .meta span { font-size: 12px; color: var(--text-tertiary); }
+
+  .view { display: none; }
+  .view.is-active { display: block; }
+
+  /* Helpers */
+  .hstack { display: inline-flex; align-items: center; gap: 8px; }
+  .vstack { display: flex; flex-direction: column; gap: 4px; }
+  .muted { color: var(--text-hint); }
+  .vh {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+
+  @media (max-width: 1100px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .settings { grid-template-columns: 1fr; }
+    .settings-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ─── Main column (sidebar removed; brand lives in topbar) ─── -->
+  <main class="main">
+
+    <!-- ═══ DASHBOARD ═══ -->
+    <section class="view is-active" id="view-dashboard">
+      <header class="topbar">
+        <a class="brand" href="#" data-view="dashboard" aria-label="Container Tracker — back to dashboard">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M5 11h2M9 11h2M13 11h2M17 11h2M5 15h2M9 15h2M13 15h2M17 15h2"/></svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Container Tracker</span>
+            <span class="brand-company" title="Acme Logistics Co.">Acme Logistics Co.</span>
+          </span>
+        </a>
+        <div class="divider" aria-hidden="true"></div>
+        <div class="page-title">Shipments <span class="muted" id="title-count">· 10 tracked</span></div>
+        <div class="spacer"></div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input id="search" type="text" placeholder="Search container, vessel, route…" />
+          <span class="kbd">Ctrl+K</span>
+        </div>
+        <button class="theme-switch" id="theme-switch" role="switch" aria-checked="false" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+        <button class="icon-btn" data-view="settings" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.34.22.7.22 1.07 0 .36-.08.72-.22 1.07z"/></svg>
+        </button>
+        <button class="btn" id="btn-open-add">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add container
+        </button>
+        <button class="btn btn-primary" id="btn-refresh" title="Refresh All ETAs & Update Excel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+          Refresh
+        </button>
+      </header>
+
+      <div class="content">
+
+        <!-- Notification stack — update banner + inline notices share a single column -->
+        <div class="notifications" role="region" aria-label="Notifications">
+          <div class="banner" role="status">
+            <span class="pill">New</span>
+            <span>Version 1.1.0 is available with route-ETA improvements.</span>
+            <a href="#">Download update →</a>
+            <button class="dismiss" title="Dismiss" aria-label="Dismiss update notice">×</button>
+          </div>
+          <div class="notice" id="notice-unmatched">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <div class="notice-body">
+              <strong>2 new containers found in your spreadsheet.</strong>
+              They aren't on ShipsGo yet. Register them now or skip until next refresh.
+            </div>
+            <div class="notice-actions">
+              <button class="btn btn-sm">Skip</button>
+              <button class="btn btn-sm btn-primary">Register 2 · 2 credits ($4)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Linked spreadsheet card -->
+        <div class="spreadsheet-card">
+          <div class="xls-icon">XLSX</div>
+          <div class="meta">
+            <div class="label">Linked spreadsheet</div>
+            <div class="path" title="C:\Users\michael\Documents\Container_Tracking.xlsx">C:\Users\michael\Documents\Container_Tracking.xlsx</div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm">Browse…</button>
+            <button class="btn btn-sm">Create template</button>
+            <button class="btn btn-sm btn-primary">Open in Excel</button>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label"><span class="dot"></span>Tracked</div>
+            <div class="stat-number">10</div>
+            <div class="stat-sub">Across <strong>8 carriers</strong></div>
+          </div>
+          <div class="stat is-sailing">
+            <div class="stat-label"><span class="dot"></span>Sailing</div>
+            <div class="stat-number">5</div>
+            <div class="stat-sub">Avg. transit <strong>54%</strong></div>
+          </div>
+          <div class="stat is-arrived">
+            <div class="stat-label"><span class="dot"></span>Arrived</div>
+            <div class="stat-number">4</div>
+            <div class="stat-sub"><strong>+1</strong> this week</div>
+          </div>
+          <div class="stat is-delayed">
+            <div class="stat-label"><span class="dot"></span>Delayed</div>
+            <div class="stat-number">2</div>
+            <div class="stat-sub">Longest <strong>+7 days</strong></div>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar" role="toolbar" aria-label="Filter shipments by status">
+          <button type="button" class="chip is-active" data-filter="all" aria-pressed="true">All <span class="count">10</span></button>
+          <button type="button" class="chip" data-filter="delayed" aria-pressed="false">Delayed <span class="count">2</span></button>
+          <button type="button" class="chip" data-filter="sailing" aria-pressed="false">Sailing <span class="count">5</span></button>
+          <button type="button" class="chip" data-filter="arrived" aria-pressed="false">Arrived <span class="count">4</span></button>
+          <button type="button" class="chip" data-filter="booked" aria-pressed="false">Booked <span class="count">1</span></button>
+          <div class="spacer"></div>
+          <span class="refresh-meta">Last refreshed <span class="time" id="last-refresh">3 min ago</span></span>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+          <table class="shipments">
+            <thead>
+              <tr>
+                <th style="width: 36px;"><input type="checkbox" aria-label="Select all" /></th>
+                <th class="sortable">Container #</th>
+                <th class="sortable">Carrier</th>
+                <th class="sorted">Status</th>
+                <th class="sortable">Original ETA</th>
+                <th class="sortable">Current ETA</th>
+                <th class="sortable">Delay</th>
+                <th>Route</th>
+                <th>Vessel</th>
+                <th style="min-width:150px">Transit</th>
+                <th style="width:64px"><span class="vh">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody id="shipments-tbody"></tbody>
+          </table>
+          <div class="table-footer">
+            <span>Showing <strong id="row-count">10</strong> of <strong>10</strong> containers</span>
+            <div class="spacer"></div>
+            <span class="muted">Sorted by <strong>Status</strong> (delayed first)</span>
+          </div>
+        </div>
+
+        <!-- Activity log (collapsible — collapsed by default; click header to expand) -->
+        <div class="activity-panel is-collapsed" id="activity-panel">
+          <button type="button" class="activity-header" id="activity-toggle" aria-expanded="false" aria-controls="activity-body">
+            <svg class="toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+            <span class="label">Activity log</span>
+            <div class="spacer"></div>
+            <span class="muted" style="font-size:11px">Last 50 events</span>
+          </button>
+          <div class="activity-body" id="activity-body">
+<div><span class="ts">[3:12 PM]</span> <span class="ok">Refreshed 10 containers — 3:12 PM EST</span></div>
+<div><span class="ts">[3:12 PM]</span> Updated 10 rows in Excel</div>
+<div><span class="ts">[3:12 PM]</span> --- DONE: 10 matched, 0 unmatched, 2 actively delayed, 10 Excel rows updated ---</div>
+<div><span class="ts">[3:12 PM]</span> &nbsp;&nbsp;EGLV5555666: SAILING | ETA: 2026-04-22 | Kaohsiung -> Los Angeles | DELAYED +7 days</div>
+<div><span class="ts">[3:12 PM]</span> &nbsp;&nbsp;MSKU1234567: SAILING | ETA: 2026-05-05 | Shanghai -> Los Angeles | DELAYED +4 days</div>
+<div><span class="ts">[3:12 PM]</span> Read 10 containers from Excel</div>
+<div><span class="ts">[3:12 PM]</span> Found 10 shipments on ShipsGo</div>
+<div><span class="ts">[3:12 PM]</span> Refreshing...</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="footer-meta">
+        <span class="live">Live data from ShipsGo API</span>
+        <span class="dot-sep">•</span>
+        <span>All times EST</span>
+        <span class="dot-sep">•</span>
+        <span>Refreshes are free &amp; unlimited</span>
+      </div>
+    </section>
+
+    <!-- ═══ SETTINGS ═══ -->
+    <section class="view" id="view-settings">
+      <header class="topbar">
+        <a class="brand" href="#" data-view="dashboard" aria-label="Container Tracker — back to dashboard">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M5 11h2M9 11h2M13 11h2M17 11h2M5 15h2M9 15h2M13 15h2M17 15h2"/></svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Container Tracker</span>
+            <span class="brand-company" title="Acme Logistics Co.">Acme Logistics Co.</span>
+          </span>
+        </a>
+        <div class="divider" aria-hidden="true"></div>
+        <button class="icon-btn" data-view="dashboard" aria-label="Back to shipments" title="Back to shipments">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="page-title">Settings</div>
+        <div class="spacer"></div>
+        <button class="btn" data-view="dashboard">Cancel</button>
+        <button class="btn btn-primary">Save changes</button>
+      </header>
+
+      <div class="content">
+        <div class="settings">
+          <nav class="settings-nav" aria-label="Settings sections">
+            <a href="#account" class="is-active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Account
+            </a>
+            <a href="#api">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              ShipsGo API
+            </a>
+            <a href="#spreadsheet">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              Linked spreadsheet
+            </a>
+            <a href="#appearance">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+              Appearance
+            </a>
+            <a href="#about">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+              About &amp; help
+            </a>
+          </nav>
+
+          <div>
+            <!-- Account -->
+            <div class="panel">
+              <h3>Account</h3>
+              <p class="panel-desc">Your company name and contact email appear on reports and the app header.</p>
+              <div class="panel-body">
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Company name</label>
+                    <input type="text" value="Acme Logistics Co." />
+                  </div>
+                  <div class="field">
+                    <label>Contact email</label>
+                    <input type="email" value="ops@acmelogistics.com" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- API key -->
+            <div class="panel">
+              <h3>ShipsGo API key</h3>
+              <p class="panel-desc">Stored securely in Windows Credential Manager — never written to plain text.</p>
+              <div class="panel-body">
+                <div class="field">
+                  <label>API key</label>
+                  <div class="row">
+                    <input type="password" value="••••••••••••••••••••••••••••••••••••" style="flex:1" />
+                    <button class="btn">Show</button>
+                    <button class="btn btn-primary">Test</button>
+                  </div>
+                  <div class="hint">Find your key at <a href="#">shipsgo.com → Dashboard → Integrations → ShipsGo API</a></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Linked spreadsheet -->
+            <div class="panel">
+              <h3>Linked spreadsheet</h3>
+              <p class="panel-desc">Container data is read from and written to this Excel workbook on every refresh.</p>
+              <div class="panel-body">
+                <div class="spreadsheet-card" style="box-shadow:none;border-color:var(--border)">
+                  <div class="xls-icon">XLSX</div>
+                  <div class="meta">
+                    <div class="label">Current file</div>
+                    <div class="path">C:\Users\michael\Documents\Container_Tracking.xlsx</div>
+                  </div>
+                  <div class="actions">
+                    <button class="btn btn-sm">Open in Excel</button>
+                    <button class="btn btn-sm">Change…</button>
+                  </div>
+                </div>
+                <div class="row">
+                  <button class="btn">Create template</button>
+                  <span class="hint">Generates a blank workbook with a "ContainerTracking" Excel Table.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Appearance -->
+            <div class="panel">
+              <h3>Appearance</h3>
+              <div class="panel-body">
+                <div class="setting-row">
+                  <div class="meta"><strong>Dark mode</strong><span>Use a darker palette in low-light environments.</span></div>
+                  <label class="switch"><input type="checkbox" id="dark-toggle-settings" /><span class="switch-track"></span></label>
+                </div>
+                <div class="setting-row">
+                  <div class="meta"><strong>Compact rows</strong><span>Shrink table row height to fit more shipments without scrolling.</span></div>
+                  <label class="switch"><input type="checkbox" /><span class="switch-track"></span></label>
+                </div>
+                <div class="setting-row">
+                  <div class="meta"><strong>Show activity log</strong><span>Display the live event log on the dashboard.</span></div>
+                  <label class="switch"><input type="checkbox" checked /><span class="switch-track"></span></label>
+                </div>
+                <div class="setting-row">
+                  <div class="meta"><strong>Auto-refresh on launch</strong><span>Pull the latest ETAs as soon as the app opens.</span></div>
+                  <label class="switch"><input type="checkbox" /><span class="switch-track"></span></label>
+                </div>
+              </div>
+            </div>
+
+            <!-- About -->
+            <div class="panel">
+              <h3>About</h3>
+              <div class="panel-body">
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 18px;font-size:12px;">
+                  <span class="muted">Version</span><span>Container Tracker v1.0.0 — up to date</span>
+                  <span class="muted">Data folder</span><span><a href="#">%APPDATA%\ContainerTracker</a></span>
+                  <span class="muted">Source</span><span><a href="#">github.com/m-mcohen/container-tracker</a></span>
+                  <span class="muted">Support</span><span>michael@example.com</span>
+                  <span class="muted">Powered by</span><span>ShipsGo API</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ─── Drawer: Container detail ─── -->
+  <div class="drawer-backdrop" id="drawer-backdrop"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-label="Container detail">
+    <div class="drawer-header">
+      <div>
+        <div class="drawer-title" id="drawer-title">MSKU1234567</div>
+        <div class="drawer-sub" id="drawer-sub">MAERSK LINE · MV SEA PIONEER</div>
+      </div>
+      <div class="drawer-close" id="drawer-close" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </div>
+    </div>
+    <div class="drawer-body">
+
+      <div class="hstack" style="flex-wrap: wrap; gap: 8px;">
+        <span class="chip-status sailing" id="drawer-status"><span class="dot"></span>Sailing</span>
+        <span class="chip" id="drawer-delay" style="cursor:default;color: var(--status-delayed);">+4 days late</span>
+        <span class="chip" style="cursor:default">Shanghai → Los Angeles</span>
+      </div>
+
+      <div>
+        <div class="section-label" style="margin-bottom: 8px;">Transit progress</div>
+        <div class="transit" style="min-width: 0;">
+          <div class="transit-bar"><div class="transit-fill sailing" id="drawer-fill" style="width: 42%;"></div></div>
+          <div class="transit-pct" id="drawer-pct">42%</div>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:6px;">Departed Shanghai Apr 12 · ETA Los Angeles May 5</div>
+      </div>
+
+      <div>
+        <div class="section-label" style="margin-bottom: 10px;">Details</div>
+        <div class="detail-grid">
+          <div class="detail-item"><div class="label">Container number</div><div class="value cn" id="drawer-cn">MSKU1234567</div></div>
+          <div class="detail-item"><div class="label">Carrier</div><div class="value">MAERSK LINE (MAEU)</div></div>
+          <div class="detail-item"><div class="label">Vessel</div><div class="value">MV SEA PIONEER</div></div>
+          <div class="detail-item"><div class="label">Voyage</div><div class="value">426W</div></div>
+          <div class="detail-item"><div class="label">Port of loading</div><div class="value">Shanghai, China</div></div>
+          <div class="detail-item"><div class="label">Port of discharge</div><div class="value">Los Angeles, USA</div></div>
+          <div class="detail-item"><div class="label">Original ETA</div><div class="value">2026-05-01</div></div>
+          <div class="detail-item"><div class="label">Current ETA</div><div class="value" style="color: var(--status-delayed); font-weight: 600;">2026-05-05</div></div>
+          <div class="detail-item"><div class="label">Reference</div><div class="value">PO-2024-018</div></div>
+          <div class="detail-item"><div class="label">Last refreshed</div><div class="value">3 min ago</div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label" style="margin-bottom: 10px;">Movement timeline</div>
+        <div class="timeline">
+          <div class="timeline-item done">
+            <div class="event">Gate in · Shanghai</div>
+            <div class="where">Yangshan Terminal, CN</div>
+            <div class="when">Apr 10, 2026 · 09:14 CST</div>
+          </div>
+          <div class="timeline-item done">
+            <div class="event">Loaded on vessel · MV SEA PIONEER</div>
+            <div class="where">Shanghai port of loading</div>
+            <div class="when">Apr 12, 2026 · 18:42 CST</div>
+          </div>
+          <div class="timeline-item current">
+            <div class="event">In transit · Pacific Ocean</div>
+            <div class="where">Approx. 42% of voyage complete</div>
+            <div class="when">Updated 3 min ago</div>
+          </div>
+          <div class="timeline-item">
+            <div class="event">Arrival at Los Angeles</div>
+            <div class="where">APM Terminals, POLB</div>
+            <div class="when">ETA May 5, 2026</div>
+          </div>
+          <div class="timeline-item">
+            <div class="event">Discharge &amp; gate out</div>
+            <div class="when">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hstack" style="justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-danger" id="drawer-remove">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          Stop tracking
+        </button>
+        <button class="btn">View on ShipsGo</button>
+        <button class="btn btn-primary">Refresh now</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── Modal: Add container ─── -->
+  <div class="modal-backdrop" id="modal-add">
+    <div class="modal" role="dialog" aria-labelledby="modal-add-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-add-title">Track a new container</div>
+        <div class="modal-sub">1 ShipsGo credit (~$2 USD) is consumed per new shipment. Refreshes are free.</div>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="f-cn">Container number</label>
+          <input id="f-cn" type="text" value="MSKU1234567" />
+          <div class="hint">11 characters: 4-letter SCAC + 7 digits, e.g. <span style="font-family:var(--font-mono)">MSKU1234567</span></div>
+        </div>
+        <div class="field">
+          <label for="f-carrier">Carrier</label>
+          <select id="f-carrier">
+            <option>MAERSK LINE</option><option>MSC</option><option>CMA CGM</option>
+            <option>HAPAG LLOYD</option><option>COSCO</option><option>EVERGREEN</option>
+            <option>ONE</option><option>YANG MING</option><option>ZIM</option>
+            <option>HMM</option><option>OOCL</option><option>PIL</option><option>OTHER</option>
+          </select>
+        </div>
+        <div class="callout warning">
+          <strong>Heads up:</strong> if this container is already tracked on your ShipsGo account, no credit will be charged.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add &amp; track
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Confirm remove (replaces v1's two messageboxes) ─── -->
+  <div class="modal-backdrop" id="modal-remove">
+    <div class="modal" role="dialog">
+      <div class="modal-header">
+        <div class="modal-title">Stop tracking this container?</div>
+        <div class="modal-sub">This shipment is still active on ShipsGo.</div>
+      </div>
+      <div class="modal-body">
+        <div class="callout">
+          Removing <strong style="font-family:var(--font-mono)" id="remove-cn">MSKU1234567</strong> will hide it from this app. Because it's still active, ShipsGo will return it on the next refresh and it will reappear here. To permanently dismiss, wait until the shipment is discharged or delivered.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-danger">Remove from app</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /* ─────────────────────────────────────────────────────────────────────
+   * Sample data — shape mirrors what extract_fields() returns from
+   * core. In the pywebview build, replace the inline ROWS array with:
+   *     const rows = await window.pywebview.api.list_containers();
+   * ──────────────────────────────────────────────────────────────────── */
+  const ROWS = [
+    { cn:"EGLV5555666", carrier:"EVERGREEN",  scac:"EGLV", status:"SAILING",   eta:"2026-04-22", orig:"2026-04-15", delay:"+7 days",  delayVal:7,  pol:"Kaohsiung, TW",   pod:"Los Angeles, USA", vessel:"MV EVER GIVEN",      pct:58 },
+    { cn:"MSKU1234567", carrier:"MAERSK LINE", scac:"MAEU", status:"SAILING",   eta:"2026-05-05", orig:"2026-05-01", delay:"+4 days",  delayVal:4,  pol:"Shanghai, CN",    pod:"Los Angeles, USA", vessel:"MV SEA PIONEER",     pct:42 },
+    { cn:"MSKU2222222", carrier:"MAERSK LINE", scac:"MAEU", status:"SAILING",   eta:"2026-04-28", orig:"2026-04-28", delay:"On time",  delayVal:0,  pol:"Qingdao, CN",     pod:"Oakland, USA",     vessel:"MV CARIBOU",         pct:65 },
+    { cn:"MSCU1111222", carrier:"MSC",         scac:"MSCU", status:"SAILING",   eta:"2026-05-10", orig:"2026-05-10", delay:"On time",  delayVal:0,  pol:"Rotterdam, NL",   pod:"New York, USA",    vessel:"MV ATLANTIC",        pct:22 },
+    { cn:"ONEY7777888", carrier:"ONE",         scac:"ONEY", status:"SAILING",   eta:"2026-05-01", orig:"2026-05-03", delay:"−2 days",  delayVal:-2, pol:"Tokyo, JP",       pod:"Los Angeles, USA", vessel:"MV SAKURA",          pct:88 },
+    { cn:"CMAU7654321", carrier:"CMA CGM",     scac:"CMDU", status:"ARRIVED",   eta:"2026-03-20", orig:"2026-03-20", delay:"On time",  delayVal:0,  pol:"Ningbo, CN",      pod:"Long Beach, USA",  vessel:"MV PACIFIC STAR",    pct:100 },
+    { cn:"CMAU3333333", carrier:"CMA CGM",     scac:"CMDU", status:"DISCHARGED",eta:"2026-04-03", orig:"2026-04-01", delay:"+2 days",  delayVal:2,  pol:"Hong Kong",       pod:"Seattle, USA",     vessel:"MV JADE",            pct:100 },
+    { cn:"ZIMU8888999", carrier:"ZIM",         scac:"ZIMU", status:"GATE_OUT",  eta:"2026-03-10", orig:"2026-03-10", delay:"On time",  delayVal:0,  pol:"Haifa, IL",       pod:"New York, USA",    vessel:"MV ZIM NORFOLK",     pct:100 },
+    { cn:"COSU6666777", carrier:"COSCO",       scac:"COSU", status:"DELIVERED", eta:"2026-03-02", orig:"2026-02-28", delay:"+2 days",  delayVal:2,  pol:"Shanghai, CN",    pod:"Savannah, USA",    vessel:"MV ORIENT",          pct:100 },
+    { cn:"HLCU4444555", carrier:"HAPAG LLOYD", scac:"HLCU", status:"BOOKED",    eta:"",           orig:"",           delay:"",         delayVal:null,pol:"",                pod:"",                 vessel:"",                   pct:null }
+  ];
+
+  // Status → CSS chip class (mirrors v1 normalize_status logic)
+  function statusClass(row) {
+    const s = (row.status || "").toUpperCase();
+    if (s === "SAILING" && row.delayVal > 0) return "delayed";
+    if (s === "SAILING") return "sailing";
+    if (s === "ARRIVED") return "arrived";
+    if (s === "DISCHARGED") return "discharged";
+    if (s === "DELIVERED") return "delivered";
+    if (s === "GATE_OUT") return "gateout";
+    if (s === "BOOKED") return "booked";
+    return "untracked";
+  }
+  function statusLabel(row) {
+    const cls = statusClass(row);
+    return { sailing:"Sailing", arrived:"Arrived", discharged:"Discharged",
+             delivered:"Delivered", gateout:"Gate out", booked:"Booked",
+             delayed:"Delayed", untracked:"—" }[cls];
+  }
+
+  // Sort: bucket priority — DELAYED < SAILING < ARRIVED < other (matches v1 StatusBucketSortProxy)
+  function rank(row) {
+    const c = statusClass(row);
+    return { delayed:0, sailing:1, arrived:2, discharged:2, gateout:2, delivered:3, booked:4, untracked:5 }[c] ?? 5;
+  }
+
+  const TBODY = document.getElementById("shipments-tbody");
+
+  let activeFilter = "all";
+
+  function render() {
+    const q = (document.getElementById("search").value || "").toUpperCase();
+    const filtered = ROWS
+      .filter(r => {
+        if (activeFilter === "delayed") return statusClass(r) === "delayed";
+        if (activeFilter === "sailing") return statusClass(r) === "sailing";
+        if (activeFilter === "arrived") return ["arrived","discharged","gateout","delivered"].includes(statusClass(r));
+        if (activeFilter === "booked")  return statusClass(r) === "booked";
+        return true;
+      })
+      .filter(r => !q || (r.cn + r.vessel + r.pol + r.pod + r.carrier).toUpperCase().includes(q))
+      .sort((a, b) => rank(a) - rank(b) || a.cn.localeCompare(b.cn));
+
+    TBODY.innerHTML = filtered.map(r => {
+      const cls = statusClass(r);
+      const delayCls = r.delayVal > 0 ? "delay-pos" : (r.delayVal < 0 ? "delay-neg" : "delay-neutral");
+      const pctHtml = r.pct === null
+        ? `<span class="muted" style="font-size:11px">Not yet sailed</span>`
+        : `<div class="transit-bar"><div class="transit-fill ${cls}" style="width:${r.pct}%;"></div></div><div class="transit-pct">${r.pct}%</div>`;
+      const routeHtml = !r.pol
+        ? `<span class="muted">—</span>`
+        : `<span class="route"><span>${r.pol}</span><span class="arrow">→</span><span>${r.pod}</span></span>`;
+      return `
+        <tr data-cn="${r.cn}">
+          <td><input type="checkbox" aria-label="Select ${r.cn}" onclick="event.stopPropagation()" /></td>
+          <td><span class="cn">${r.cn}</span></td>
+          <td><span class="carrier"><span class="carrier-badge c-${r.scac}">${r.scac}</span>${r.carrier}</span></td>
+          <td><span class="chip-status ${cls}"><span class="dot"></span>${statusLabel(r)}</span></td>
+          <td>${r.orig || '<span class="muted">—</span>'}</td>
+          <td>${r.eta || '<span class="muted">—</span>'}</td>
+          <td><span class="${delayCls}">${r.delay || '—'}</span></td>
+          <td>${routeHtml}</td>
+          <td>${r.vessel || '<span class="muted">—</span>'}</td>
+          <td><div class="transit">${pctHtml}</div></td>
+          <td>
+            <div class="row-actions">
+              <button class="row-action" aria-label="Refresh ${r.cn}" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+              <button class="row-action" aria-label="More actions for ${r.cn}" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
+            </div>
+          </td>
+        </tr>`;
+    }).join("");
+
+    document.getElementById("row-count").textContent = filtered.length;
+  }
+  render();
+
+  /* ─── Drawer ─── */
+  const app = document.getElementById("app");
+  TBODY.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr");
+    if (!tr) return;
+    const row = ROWS.find(r => r.cn === tr.dataset.cn);
+    if (!row) return;
+    const cls = statusClass(row);
+    document.getElementById("drawer-title").textContent = row.cn;
+    document.getElementById("drawer-sub").textContent = `${row.carrier} · ${row.vessel || "No vessel yet"}`;
+    const status = document.getElementById("drawer-status");
+    status.className = `chip-status ${cls}`;
+    status.innerHTML = `<span class="dot"></span>${statusLabel(row)}`;
+    const delay = document.getElementById("drawer-delay");
+    if (row.delayVal > 0) { delay.style.color = "var(--status-delayed)"; delay.textContent = `${row.delay} late`; }
+    else if (row.delayVal < 0) { delay.style.color = "var(--status-arrived)"; delay.textContent = `${row.delay} early`; }
+    else if (row.delayVal === 0) { delay.style.color = "var(--text-secondary)"; delay.textContent = "On time"; }
+    else { delay.style.color = "var(--text-hint)"; delay.textContent = "Not yet sailed"; }
+    const fill = document.getElementById("drawer-fill");
+    const pct  = document.getElementById("drawer-pct");
+    if (row.pct === null) { fill.style.width = "0%"; pct.textContent = "—"; }
+    else { fill.style.width = row.pct + "%"; fill.className = `transit-fill ${cls}`; pct.textContent = row.pct + "%"; }
+    document.getElementById("drawer-cn").textContent = row.cn;
+    app.classList.add("drawer-open");
+  });
+  document.getElementById("drawer-close").addEventListener("click", () => app.classList.remove("drawer-open"));
+  document.getElementById("drawer-backdrop").addEventListener("click", () => app.classList.remove("drawer-open"));
+  document.getElementById("drawer-remove").addEventListener("click", () => {
+    document.getElementById("remove-cn").textContent = document.getElementById("drawer-cn").textContent;
+    app.classList.remove("drawer-open");
+    app.classList.add("modal-remove-open");
+  });
+
+  /* ─── Modals ─── */
+  document.getElementById("btn-open-add").addEventListener("click", () => app.classList.add("modal-add-open"));
+  document.querySelectorAll("[data-close-modal]").forEach(b =>
+    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-remove-open"))
+  );
+  ["modal-add", "modal-remove"].forEach(id => {
+    document.getElementById(id).addEventListener("click", (e) => {
+      if (e.target.id === id) app.classList.remove("modal-add-open", "modal-remove-open");
+    });
+  });
+
+  /* ─── View routing — brand + gear button + Cancel/back all use [data-view] ─── */
+  function showView(name) {
+    document.querySelectorAll(".view").forEach(x => x.classList.remove("is-active"));
+    const el = document.getElementById("view-" + name);
+    if (el) el.classList.add("is-active");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  document.querySelectorAll("[data-view]").forEach(el => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      showView(el.dataset.view);
+    });
+  });
+
+  /* ─── Settings nav (highlight section + smooth scroll) ─── */
+  document.querySelectorAll(".settings-nav a").forEach(a => {
+    a.addEventListener("click", () => {
+      document.querySelectorAll(".settings-nav a").forEach(x => x.classList.remove("is-active"));
+      a.classList.add("is-active");
+    });
+  });
+
+  /* ─── Filter chips ─── */
+  document.querySelectorAll(".toolbar .chip").forEach(c => {
+    c.addEventListener("click", () => {
+      activeFilter = c.dataset.filter;
+      document.querySelectorAll(".toolbar .chip").forEach(x => {
+        const match = x.dataset.filter === activeFilter;
+        x.classList.toggle("is-active", match);
+        x.setAttribute("aria-pressed", match ? "true" : "false");
+      });
+      render();
+    });
+  });
+
+  /* ─── Search ─── */
+  document.getElementById("search").addEventListener("input", render);
+
+  /* ─── Theme switch ─── */
+  function setTheme(dark) {
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    const sw = document.getElementById("theme-switch");
+    if (sw) sw.setAttribute("aria-checked", dark ? "true" : "false");
+    const cb = document.getElementById("dark-toggle-settings");
+    if (cb) cb.checked = !!dark;
+  }
+  document.getElementById("theme-switch").addEventListener("click", () => {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    setTheme(!isDark);
+  });
+  const dts = document.getElementById("dark-toggle-settings");
+  if (dts) dts.addEventListener("change", e => setTheme(e.target.checked));
+
+  /* ─── Activity panel collapse ─── */
+  document.getElementById("activity-toggle").addEventListener("click", () => {
+    const panel = document.getElementById("activity-panel");
+    const wasCollapsed = panel.classList.contains("is-collapsed");
+    panel.classList.toggle("is-collapsed");
+    document.getElementById("activity-toggle").setAttribute("aria-expanded", wasCollapsed ? "true" : "false");
+  });
+
+  /* ─── Refresh: spin + update timestamp ─── */
+  document.getElementById("btn-refresh").addEventListener("click", () => {
+    const btn = document.getElementById("btn-refresh");
+    const svg = btn.querySelector("svg");
+    svg.style.transition = "transform .8s ease";
+    svg.style.transform = "rotate(540deg)";
+    setTimeout(() => { svg.style.transform = "rotate(0)"; }, 850);
+    document.getElementById("last-refresh").textContent = "just now";
+  });
+
+  /* ─── Keyboard shortcuts ─── */
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      app.classList.remove("drawer-open", "modal-add-open", "modal-remove-open");
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      document.getElementById("search").focus();
+      document.getElementById("search").select();
+    }
+  });
+
+  /* Banner dismiss */
+  document.querySelectorAll(".banner .dismiss").forEach(b =>
+    b.addEventListener("click", () => b.closest(".banner").remove())
+  );
+
+  /* Notice dismiss (skip / register buttons both clear the notice for the demo) */
+  document.querySelectorAll("#notice-unmatched .btn-sm").forEach(b =>
+    b.addEventListener("click", () => document.getElementById("notice-unmatched").remove())
+  );
+</script>
+
+</body>
+</html>
