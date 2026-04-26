@@ -1,0 +1,51 @@
+{
+  "message": "OK",
+  "shipment": {
+    "id": "test-shipment-id-0001",
+    "status": "SAILING",
+    "container_number": "EVRG1234567",
+    "reference": "TEST-PO-001",
+    "carrier": {
+      "name": "EVERGREEN MARINE CORP",
+      "scac": "EGLV"
+    },
+    "route": {
+      "transit_percentage": 58,
+      "port_of_loading": {
+        "location": {
+          "name": "Kaohsiung, TW",
+          "country": "TW"
+        },
+        "date_of_loading": "2026-04-02T08:00:00Z"
+      },
+      "port_of_discharge": {
+        "location": {
+          "name": "Los Angeles, USA",
+          "country": "US"
+        },
+        "date_of_discharge": "2026-04-22T18:00:00Z",
+        "date_of_discharge_initial": "2026-04-15T18:00:00Z"
+      }
+    },
+    "containers": [
+      {
+        "number": "EVRG1234567",
+        "movements": [
+          {
+            "event": "GATE_IN",
+            "timestamp": "2026-04-01T12:00:00Z",
+            "vessel": null
+          },
+          {
+            "event": "LOADED_ON_VESSEL",
+            "timestamp": "2026-04-02T08:00:00Z",
+            "vessel": {
+              "name": "MV TEST VOYAGER",
+              "imo": "0000000"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

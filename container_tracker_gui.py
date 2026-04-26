@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """
-Container Tracker
+Container Tracker — legacy tkinter entry point.
+
+Logic helpers live in the container_tracker.core package; this file is just the
+v1 GUI shell (tkinter / CustomTkinter widgets, SetupDialog, ContainerTrackerApp).
+The pywebview replacement is built alongside this file and will eventually
+supersede it (see docs/MIGRATION_PROMPT.md).
 """
 
-__version__ = "1.0.0"
-
-import json, os, sys, threading, logging, webbrowser, shutil, re
-from datetime import datetime, timezone, timedelta
+import logging
+import os
+import sys
+import threading
+import webbrowser
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -27,197 +34,43 @@ try:
 except ImportError:
     HAS_PIL = False
 
-try:
-    from openpyxl import Workbook, load_workbook
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-    from openpyxl.worksheet.table import Table, TableStyleInfo
-    HAS_OPENPYXL = True
-except ImportError:
-    HAS_OPENPYXL = False
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
+HAS_OPENPYXL = True
 
-try:
-    import keyring
-except ImportError:
-    keyring = None
-
-
-APP_NAME = "Container Tracker"
-APP_SHORT_NAME = "ContainerTracker"
-GITHUB_REPO = "m-mcohen/container-tracker"
-ACCENT = "#2563eb"
-
-API_BASE = "https://api.shipsgo.com/v2"
-KEYRING_SERVICE = f"{APP_SHORT_NAME}_shipsgo_api"
-LEGACY_KEYRING_SERVICE = "KenGabbayTracker_shipsgo_api"
-KEYRING_USER = "default"
-
-
-def resource_path(rel: str) -> Path:
-    base = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
-    return Path(base) / rel
-
-
-LOGO_PATH = resource_path("app.ico")  # window icon only; not rendered in-app
-
-
-def get_data_dir() -> Path:
-    if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA", Path.home()))
-    else:
-        base = Path.home() / ".config"
-    d = base / APP_SHORT_NAME
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+from container_tracker.core import config as ct_config
+from container_tracker.core import credentials as ct_credentials
+from container_tracker.core.api import ShipsGoClient, resolve_scac
+from container_tracker.core.config import (
+    CONFIG_FILE, DATA_DIR, LOG_FILE, TRACKING_DB_FILE,
+    is_first_run, load_config, load_json, save_config, save_json,
+)
+from container_tracker.core.constants import (
+    ACCENT, API_BASE, APP_NAME, APP_SHORT_NAME, CARRIER_NAMES,
+    CARRIER_SCAC_MAP, CONTAINER_COL_KEYWORDS, GITHUB_REPO, __version__,
+)
+from container_tracker.core.credentials import (
+    KEYRING_SERVICE, KEYRING_USER, LEGACY_KEYRING_SERVICE,
+    get_api_token, set_api_token,
+)
+from container_tracker.core.excel import (
+    TRACKING_COL_MAP, create_template_excel, find_container_column,
+    find_or_create_tracking_columns, read_containers_from_excel,
+    update_excel_with_tracking,
+)
+from container_tracker.core.status import (
+    API_KEY_PATTERN, EMAIL_PATTERN, extract_fields, validate_setup_fields,
+)
+from container_tracker.core.updates import check_for_update_async
+from container_tracker.core.util import (
+    EST, app_icon_path, now_est, now_est_short, open_in_explorer, resource_path,
+)
 
 
-DATA_DIR = get_data_dir()
-CONFIG_FILE = DATA_DIR / "config.json"
-TRACKING_DB_FILE = DATA_DIR / "tracking_data.json"
-LOG_FILE = DATA_DIR / "tracker.log"
-
-
-def _migrate_data_folder(src: Path, dst: Path) -> int:
-    """Move known data files from src → dst. Returns number of files moved. Removes src only if it emptied out."""
-    if src is None or not src.exists() or src.resolve() == dst.resolve():
-        return 0
-    moved = 0
-    for name in ("config.json", "tracking_data.json", "tracker.log"):
-        s = src / name
-        d = dst / name
-        if s.exists() and not d.exists():
-            try:
-                shutil.move(str(s), str(d))
-                moved += 1
-            except Exception:
-                pass
-    if moved > 0:
-        try:
-            remaining = list(src.iterdir())
-            if not remaining:
-                src.rmdir()
-                # Try to clean up KGC's company-level parent if it becomes empty.
-                try:
-                    parent = src.parent
-                    appdata = Path(os.environ.get("APPDATA", "")) if sys.platform == "win32" else None
-                    if parent.exists() and parent != appdata and not list(parent.iterdir()):
-                        parent.rmdir()
-                except Exception:
-                    pass
-        except Exception:
-            pass
-    return moved
-
-
-# Migration chain: (i) next-to-exe/.py (oldest layout) and (ii) KGC-named APPDATA folder → DATA_DIR
-_LEGACY_EXE_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(os.path.dirname(os.path.abspath(__file__)))
-_LEGACY_KGC_DIR = None
-if sys.platform == "win32":
-    _LEGACY_KGC_DIR = Path(os.environ.get("APPDATA", Path.home())) / "Ken Gabbay Coffee" / "KenGabbayTracker"
-
-_migrate_data_folder(_LEGACY_EXE_DIR, DATA_DIR)
-_migrate_data_folder(_LEGACY_KGC_DIR, DATA_DIR)
-
-EST = timezone(timedelta(hours=-5))
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
-                    handlers=[logging.FileHandler(LOG_FILE)])
 logger = logging.getLogger(__name__)
-
-
-def get_api_token() -> str:
-    if keyring is None:
-        return ""
-    try:
-        return keyring.get_password(KEYRING_SERVICE, KEYRING_USER) or ""
-    except Exception as e:
-        logger.info(f"keyring read failed: {e}")
-        return ""
-
-
-def set_api_token(token: str):
-    if keyring is None:
-        logger.info("keyring not installed; token not persisted")
-        return
-    try:
-        keyring.set_password(KEYRING_SERVICE, KEYRING_USER, token)
-    except Exception as e:
-        logger.info(f"keyring write failed: {e}")
-
-
-def _migrate_keyring():
-    if keyring is None:
-        return
-    try:
-        old = keyring.get_password(LEGACY_KEYRING_SERVICE, KEYRING_USER)
-    except Exception as e:
-        logger.info(f"keyring legacy read failed: {e}")
-        return
-    if not old:
-        return
-    try:
-        current = keyring.get_password(KEYRING_SERVICE, KEYRING_USER)
-    except Exception:
-        current = None
-    if not current:
-        try:
-            keyring.set_password(KEYRING_SERVICE, KEYRING_USER, old)
-            logger.info("migrated keyring entry to new service name")
-        except Exception as e:
-            logger.info(f"keyring migrate write failed: {e}")
-            return
-    try:
-        keyring.delete_password(LEGACY_KEYRING_SERVICE, KEYRING_USER)
-    except Exception as e:
-        logger.info(f"keyring legacy delete failed: {e}")
-
-
-_migrate_keyring()
-
-
-def check_for_update_async(on_update):
-    """Background GitHub Releases check. Calls on_update(tag, html_url) if a newer version is available."""
-    def _go():
-        try:
-            if "<<" in GITHUB_REPO or "/" not in GITHUB_REPO:
-                return
-            r = requests.get(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest", timeout=5)
-            if r.status_code != 200:
-                logger.info(f"update check: HTTP {r.status_code}")
-                return
-            data = r.json()
-            tag = str(data.get("tag_name", "")).lstrip("v").strip()
-            url = data.get("html_url", "")
-            if not tag:
-                return
-            from packaging.version import parse as _parse
-            if _parse(tag) > _parse(__version__):
-                on_update(tag, url)
-        except Exception as e:
-            logger.info(f"update check failed: {e}")
-    threading.Thread(target=_go, daemon=True).start()
-
-
-API_KEY_PATTERN = re.compile(r"^[0-9a-fA-F\-]{30,40}$")
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-def open_in_explorer(path: Path):
-    try:
-        if sys.platform == "win32":
-            os.startfile(str(path))
-        elif sys.platform == "darwin":
-            import subprocess; subprocess.Popen(["open", str(path)])
-        else:
-            import subprocess; subprocess.Popen(["xdg-open", str(path)])
-    except Exception as e:
-        logger.info(f"open_in_explorer failed: {e}")
-
-def now_est():
-    return datetime.now(EST).strftime("%Y-%m-%d %I:%M %p EST")
-
-def now_est_short():
-    return datetime.now(EST).strftime("%I:%M %p")
+LOGO_PATH = app_icon_path()  # window icon only; not rendered in-app
 
 LIGHT = {
     "bg": "#ECEAE5", "card": "#FFFFFF", "input": "#F7F6F3",
@@ -243,61 +96,6 @@ DARK = {
     "disc_bg": "#1A3A24", "disc_fg": "#66BB6A",
     "stat_bg": "#242429",
 }
-
-CARRIER_SCAC_MAP = {
-    "MAERSK": "MAEU", "MAERSK LINE": "MAEU", "MSC": "MSCU",
-    "CMA CGM": "CMDU", "HAPAG LLOYD": "HLCU", "HAPAG-LLOYD": "HLCU",
-    "COSCO": "COSU", "EVERGREEN": "EGLV", "ONE": "ONEY",
-    "YANG MING": "YMLU", "ZIM": "ZIMU", "HMM": "HDMU", "OOCL": "OOLU", "PIL": "PILU"}
-CARRIER_NAMES = ["MAERSK LINE","MSC","CMA CGM","HAPAG LLOYD","COSCO",
-                 "EVERGREEN","ONE","YANG MING","ZIM","HMM","OOCL","PIL","OTHER"]
-CONTAINER_COL_KEYWORDS = ["container","cntr","container #","container number",
-                          "container_number","container no","cntr #","cntr no"]
-
-def resolve_scac(line):
-    u = line.strip().upper()
-    return CARRIER_SCAC_MAP.get(u, u if len(u)==4 else u)
-
-def load_json(fp, default=None):
-    p = Path(fp)
-    if p.exists():
-        with open(p) as f: return json.load(f)
-    return default if default is not None else {}
-def save_json(fp, data):
-    with open(fp,"w") as f: json.dump(data,f,indent=2,default=str)
-def load_config():
-    return load_json(CONFIG_FILE, {"company_name":"","contact_email":"","excel_path":"","dark_mode":False,"dismissed":[]})
-def save_config(c):
-    save_json(CONFIG_FILE,c)
-
-def migrate_token_from_config(cfg: dict) -> bool:
-    """If config.json contains a legacy token field, move it to keyring. Returns True if migrated."""
-    changed = False
-    for key in ("shipsgo_api_token", "api_key"):
-        if key in cfg:
-            tok = str(cfg.pop(key) or "").strip()
-            if tok:
-                set_api_token(tok)
-                logger.info(f"migrated {key} from config.json to keyring")
-            changed = True
-    return changed
-
-
-def is_first_run(cfg: dict) -> bool:
-    return not cfg.get("company_name") and not get_api_token()
-
-
-def validate_setup_fields(company: str, api_key: str, email: str) -> str | None:
-    if not company.strip():
-        return "Company name is required."
-    if not api_key.strip():
-        return "ShipsGo API key is required."
-    if not API_KEY_PATTERN.match(api_key.strip()):
-        return "That API key doesn't look right — check for extra spaces or missing characters."
-    if not email.strip() or not EMAIL_PATTERN.match(email.strip()):
-        return "Enter a valid email address."
-    return None
-
 
 class SetupDialog:
     """Modal first-run / settings editor for company_name + api_key + contact_email."""
@@ -477,195 +275,11 @@ class SetupDialog:
             pass
         sys.exit(0)
 
-class ShipsGoClient:
-    def __init__(self, token):
-        self.session = requests.Session()
-        self.session.headers.update({"Accept":"application/json","Content-Type":"application/json",
-                                     "X-Shipsgo-User-Token":token})
-    def create_shipment(self, container_number="", carrier_scac=""):
-        payload = {}
-        if container_number: payload["container_number"]=container_number.strip().upper()
-        if carrier_scac: payload["carrier_scac"]=carrier_scac.strip().upper()
-        r = self.session.post(f"{API_BASE}/ocean/shipments",json=payload,timeout=30)
-        if r.status_code==409: return {"already_exists":True}
-        if r.status_code==402: return {"error":"NOT_ENOUGH_CREDITS"}
-        r.raise_for_status(); return r.json()
-    def list_shipments(self, take=100):
-        r = self.session.get(f"{API_BASE}/ocean/shipments",params={"take":take},timeout=30)
-        r.raise_for_status(); d=r.json()
-        return d.get("shipments",d.get("data",[])) if isinstance(d,dict) else d
-    def get_shipment(self, sid):
-        r = self.session.get(f"{API_BASE}/ocean/shipments/{sid}",timeout=30)
-        r.raise_for_status(); return r.json()
-    def delete_shipment(self, sid):
-        r = self.session.delete(f"{API_BASE}/ocean/shipments/{sid}",timeout=30)
-        r.raise_for_status(); return r.json()
-
-def extract_fields(shipment):
-    if "shipment" in shipment and isinstance(shipment["shipment"],dict):
-        shipment=shipment["shipment"]
-    f = {"status":"","vessel":"","pol":"","pod":"","eta":"","etd":"",
-         "carrier":"","transit_pct":"","original_eta":"","delay_days":""}
-    f["status"]=shipment.get("status","")
-    cr=shipment.get("carrier") or {}
-    if isinstance(cr,dict): f["carrier"]=cr.get("name",cr.get("scac",""))
-    route=shipment.get("route") or {}
-    pol=route.get("port_of_loading") or route.get("origin") or {}
-    pl=pol.get("location") or {}
-    f["pol"]=pl.get("name","")
-    f["etd"]=pol.get("date_of_loading",pol.get("date_of_dep",""))
-    pod=route.get("port_of_discharge") or route.get("destination") or {}
-    dl=pod.get("location") or {}
-    f["pod"]=dl.get("name","")
-    f["eta"]=pod.get("date_of_discharge",pod.get("date_of_eta",""))
-    f["original_eta"]=pod.get("date_of_discharge_initial",pod.get("date_of_eta_initial",""))
-    f["transit_pct"]=route.get("transit_percentage","")
-    try:
-        es=str(f["eta"]).split("T")[0] if f["eta"] else ""
-        os_=str(f["original_eta"]).split("T")[0] if f["original_eta"] else ""
-        if es and os_:
-            ed=datetime.strptime(es,"%Y-%m-%d"); od=datetime.strptime(os_,"%Y-%m-%d")
-            diff=(ed-od).days
-            if diff>0: f["delay_days"]=f"+{diff} days"
-            elif diff<0: f["delay_days"]=f"{diff} days (early)"
-            else: f["delay_days"]="On time"
-    except: pass
-    containers=shipment.get("containers") or []
-    if containers and isinstance(containers[0],dict):
-        for m in reversed(containers[0].get("movements") or []):
-            if isinstance(m,dict) and m.get("vessel"):
-                v=m["vessel"]
-                if isinstance(v,dict) and v.get("name"): f["vessel"]=v["name"]; break
-    for k in ("eta","etd","original_eta"):
-        if f[k] and "T" in str(f[k]): f[k]=str(f[k]).split("T")[0]
-    return f
-
-TRACKING_COL_MAP = {"Carrier":"carrier","Status":"status","ETA":"eta",
-    "Original ETA":"original_eta","Delay":"delay_days",
-    "Port of Loading":"pol","Port of Discharge":"pod",
-    "Vessel":"vessel","Transit %":"transit_pct","Last Refreshed":"last_refreshed"}
-
-def find_container_column(ws):
-    for c in range(1,ws.max_column+1):
-        h=str(ws.cell(row=1,column=c).value or "").strip().lower()
-        if h in CONTAINER_COL_KEYWORDS: return c
-    for c in range(1,ws.max_column+1):
-        h=str(ws.cell(row=1,column=c).value or "").strip().lower()
-        if "container" in h or "cntr" in h: return c
-    return None
-
-def find_or_create_tracking_columns(ws):
-    existing={}
-    for c in range(1,ws.max_column+1):
-        h=str(ws.cell(row=1,column=c).value or "").strip()
-        if h: existing[h.lower()]=c
-    fm={}; nc=ws.max_column+1
-    hf=Font(name="Calibri",bold=True,size=11,color="FFFFFF")
-    hfill=PatternFill(start_color="1F4E79",end_color="1F4E79",fill_type="solid")
-    ha=Alignment(horizontal="center",vertical="center")
-    for hn,fk in TRACKING_COL_MAP.items():
-        fc=existing.get(hn.lower())
-        if fc: fm[fk]=fc
-        else:
-            c=ws.cell(row=1,column=nc,value=hn); c.font=hf; c.fill=hfill; c.alignment=ha
-            fm[fk]=nc; nc+=1
-    return fm
-
-def read_containers_from_excel(path):
-    wb=load_workbook(str(path),data_only=True); ws=wb.active
-    cc=find_container_column(ws)
-    if cc is None: wb.close(); return []
-    out=[]
-    for r in range(2,ws.max_row+1):
-        v=ws.cell(row=r,column=cc).value
-        if v:
-            cn=str(v).strip().upper()
-            if len(cn)>=10: out.append(cn)
-    wb.close(); return out
-
-def update_excel_with_tracking(path, data):
-    wb=load_workbook(str(path)); ws=wb.active
-    cc=find_container_column(ws)
-    if cc is None: wb.close(); raise ValueError("No Container column found.")
-    fm=find_or_create_tracking_columns(ws)
-    sc={"sailing":"D6EAF8","en_route":"D6EAF8","arrived":"D5F5E3",
-        "discharged":"ABEBC6","delivered":"82E0AA","booked":"FCF3CF",
-        "new":"FCF3CF","untracked":"F2F3F4"}
-    count=0; ts=now_est()
-    for r in range(2,ws.max_row+1):
-        cv=ws.cell(row=r,column=cc).value
-        if not cv: continue
-        cn=str(cv).strip().upper()
-        if cn in data:
-            rec=data[cn]
-            for fk,col in fm.items():
-                val=rec.get(fk,"")
-                if fk=="transit_pct" and val!="": val=f"{val}%"
-                if fk=="last_refreshed": val=ts
-                ws.cell(row=r,column=col,value=val)
-            scol=fm.get("status")
-            if scol:
-                cell=ws.cell(row=r,column=scol)
-                sl=str(cell.value or "").lower().replace(" ","_")
-                for sk,color in sc.items():
-                    if sk in sl: cell.fill=PatternFill(start_color=color,fill_type="solid"); break
-            dcol=fm.get("delay_days")
-            if dcol:
-                dc=ws.cell(row=r,column=dcol); dv=str(dc.value or "")
-                if dv.startswith("+"):
-                    dc.fill=PatternFill(start_color="FADBD8",fill_type="solid")
-                    dc.font=Font(color="C0392B")
-                elif "early" in dv:
-                    dc.fill=PatternFill(start_color="D5F5E3",fill_type="solid")
-                    dc.font=Font(color="27AE60")
-                elif "On time" in dv: dc.font=Font(color="27AE60")
-            count+=1
-    # Append containers in tracker but not yet in Excel
-    existing_containers=set()
-    for r in range(2,ws.max_row+1):
-        cv=ws.cell(row=r,column=cc).value
-        if cv: existing_containers.add(str(cv).strip().upper())
-    appended=0
-    for cn,rec in data.items():
-        if cn not in existing_containers and rec.get("status"):
-            nr=ws.max_row+1
-            ws.cell(row=nr,column=cc,value=cn)
-            for fk,col in fm.items():
-                val=rec.get(fk,"")
-                if fk=="transit_pct" and val!="": val=f"{val}%"
-                if fk=="last_refreshed": val=ts
-                ws.cell(row=nr,column=col,value=val)
-            appended+=1; count+=1
-    for fk,col in fm.items():
-        ml=max((len(str(ws.cell(row=r,column=col).value or "")) for r in range(1,ws.max_row+1)),default=10)
-        ws.column_dimensions[get_column_letter(col)].width=min(ml+4,30)
-    wb.save(str(path)); wb.close(); return count
-
-def create_template_excel(path):
-    wb=Workbook(); ws=wb.active; ws.title="Container Tracking"
-    headers=["Container #","PO / Reference","Notes","Carrier","Status","ETA","Original ETA",
-             "Delay","Port of Loading","Port of Discharge","Vessel","Transit %","Last Refreshed"]
-    for col,h in enumerate(headers,1):
-        ws.cell(row=1,column=col,value=h)
-    for ri,(cn,ref,n) in enumerate([("MSKU1234567","PO-2024-001","Sample - replace"),("MSCU7654321","PO-2024-002","")],2):
-        ws.cell(row=ri,column=1,value=cn)
-        ws.cell(row=ri,column=2,value=ref)
-        ws.cell(row=ri,column=3,value=n)
-    lc=get_column_letter(len(headers))
-    tbl=Table(displayName="ContainerTracking",ref=f"A1:{lc}3")
-    tbl.tableStyleInfo=TableStyleInfo(name="TableStyleMedium2",showFirstColumn=False,
-        showLastColumn=False,showRowStripes=True,showColumnStripes=False)
-    ws.add_table(tbl)
-    for i,w in enumerate([18,18,25,16,14,14,14,14,20,20,20,12,22],1):
-        ws.column_dimensions[get_column_letter(i)].width=w
-    ws.freeze_panes="A2"; wb.save(str(path)); wb.close(); return str(path)
-
-
 _BaseRoot = ctk.CTk if HAS_CTK else tk.Tk
 
 
 class ContainerTrackerApp(_BaseRoot):
-    def __init__(self):
+    def __init__(self, cfg: dict | None = None):
         if HAS_CTK:
             ctk.set_appearance_mode("light")
         super().__init__()
@@ -676,9 +290,10 @@ class ContainerTrackerApp(_BaseRoot):
 
         self.root = self  # alias so the rest of the class can keep using self.root.*
 
-        self.config=load_config()
-        if migrate_token_from_config(self.config):
-            save_config(self.config)
+        # Boot/migrations are now run by the entry point (see __main__ below) or
+        # by core.config.boot(). Caller passes a pre-loaded config; fall back to
+        # load_config() for callers that haven't been updated yet.
+        self.config = cfg if cfg is not None else load_config()
         self.is_dark=self.config.get("dark_mode",False)
         self.T=DARK if self.is_dark else LIGHT
         self.db=load_json(TRACKING_DB_FILE,{})
@@ -1305,4 +920,6 @@ class ContainerTrackerApp(_BaseRoot):
 
     def run(self): self.root.mainloop()
 
-if __name__=="__main__": ContainerTrackerApp().run()
+if __name__ == "__main__":
+    ct_config.boot()
+    ContainerTrackerApp(ct_config.load_config()).run()
