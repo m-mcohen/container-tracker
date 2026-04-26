@@ -385,11 +385,15 @@
     align-items: flex-start;
     gap: 12px;
     padding: 12px 14px;
-    border-radius: var(--r-card);
+    border-radius: 8px;
     background: var(--status-booked-bg);
     border: 1px solid color-mix(in srgb, var(--status-booked) 25%, transparent);
     color: var(--status-booked);
     font-size: 13px;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
   }
   .notice-body { flex: 1; }
   .notice-body strong { font-weight: 700; }
