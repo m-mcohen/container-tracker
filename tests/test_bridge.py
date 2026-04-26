@@ -129,6 +129,7 @@ def test_get_settings_reads_config(isolated_data_dir, mock_keyring):
         "company_name": "ACME",
         "api_token_present": True,
         "theme": "light",
+        "excel_path": "",
     }
 
 
@@ -285,6 +286,8 @@ def test_refresh_all_no_token_returns_error_dict(isolated_data_dir, mock_keyring
     assert result == {
         "updated": 0, "failed": [],
         "duration_ms": 0, "error": "API token not configured",
+        "excel_read_failed": False, "excel_write_failed": False,
+        "unmatched": [], "excel_rows_updated": 0,
     }
 
 
@@ -551,3 +554,394 @@ def test_save_settings_empty_token_doesnt_clear(isolated_data_dir,
     # Whitespace-only also doesn't clear.
     Bridge().save_settings("ACME", "   ")
     assert credentials.get_api_token() == "orig"
+
+
+# ---------------------------------------------------------------------------
+# Excel I/O integration (Step 6.5)
+#
+# refresh_all extends to read CNs from the linked workbook, surface
+# unmatched CNs in the result, and write the workbook on success — all
+# while keeping locked-file errors from aborting the data sync.
+# ---------------------------------------------------------------------------
+
+def _link_workbook(path):
+    """Helper: write a config.json that links the given xlsx path. Caller
+    must already be inside isolated_data_dir."""
+    ct_config.save_config({
+        "company_name": "", "contact_email": "", "excel_path": str(path),
+        "dark_mode": False, "dismissed": [],
+    })
+
+
+def test_refresh_all_no_excel_path_skips_excel_io(
+        isolated_data_dir, monkeypatch, patched_token, sample_tracking_db):
+    """No linked workbook → Excel keys all default; no openpyxl calls."""
+    sample_tracking_db()
+    payload = _fixture_payload()
+    factory = _FakeShipsGoClient.factory(
+        listing=[],
+        get_results={payload["shipment"]["id"]: payload},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+    # Sentinel: replacing the helpers with raisers proves they're never
+    # called when no path is configured.
+    def boom(*a, **k):  # pragma: no cover - only fires if test fails
+        raise AssertionError("excel helper should not be called")
+    monkeypatch.setattr(ct_bridge, "read_containers_from_excel", boom)
+    monkeypatch.setattr(ct_bridge, "update_excel_with_tracking", boom)
+
+    result = Bridge().refresh_all()
+
+    assert result["excel_read_failed"] is False
+    assert result["excel_write_failed"] is False
+    assert result["unmatched"] == []
+    assert result["excel_rows_updated"] == 0
+
+
+def test_refresh_all_reads_cns_from_excel_and_adds_to_db(
+        isolated_data_dir, monkeypatch, patched_token, sample_workbook):
+    """A CN that's only in Excel gets stubbed into db; if it's not on
+    ShipsGo, it lands in result["unmatched"]."""
+    wb_path = sample_workbook(rows=("EVRG7777777",))
+    _link_workbook(wb_path)
+    factory = _FakeShipsGoClient.factory(listing=[], get_results={})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().refresh_all()
+
+    assert result["error"] is None
+    assert "EVRG7777777" in result["unmatched"]
+    # The stub also got persisted to tracking_data.json.
+    persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert "EVRG7777777" in persisted
+
+
+def test_refresh_all_excel_locked_on_read(
+        isolated_data_dir, monkeypatch, patched_token, sample_tracking_db,
+        save_spy):
+    """PermissionError during read → flag set, refresh still completes,
+    tracking_data.json still written. Improvement over legacy's
+    abort-on-locked-read."""
+    sample_tracking_db()
+    save_spy["tracking_writes"] = 0
+    payload = _fixture_payload()
+    inner = payload["shipment"]
+    _link_workbook("C:/some/file.xlsx")
+    # File "exists" — patch Path.exists to lie so the read branch fires.
+    monkeypatch.setattr(ct_bridge.Path, "exists", lambda self: True)
+
+    def locked(_):
+        raise PermissionError("file in use")
+    monkeypatch.setattr(ct_bridge, "read_containers_from_excel", locked)
+    # Write is also short-circuited to avoid touching the fake path.
+    monkeypatch.setattr(ct_bridge, "update_excel_with_tracking",
+                        lambda p, db: 0)
+
+    factory = _FakeShipsGoClient.factory(
+        listing=[{"id": inner["id"], "container_number": inner["container_number"]}],
+        get_results={inner["id"]: payload},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().refresh_all()
+
+    assert result["excel_read_failed"] is True
+    assert result["error"] is None
+    # tracking_data.json still saved despite the read failure.
+    assert save_spy["tracking_writes"] == 1
+
+
+def test_refresh_all_excel_locked_on_write(
+        isolated_data_dir, monkeypatch, patched_token, sample_tracking_db,
+        save_spy):
+    """PermissionError during write → flag set, db saved, refresh
+    completes (legacy behavior matches; improvement is the explicit flag
+    surfaced to JS)."""
+    sample_tracking_db()
+    save_spy["tracking_writes"] = 0
+    payload = _fixture_payload()
+    inner = payload["shipment"]
+    _link_workbook("C:/some/file.xlsx")
+    monkeypatch.setattr(ct_bridge.Path, "exists", lambda self: True)
+    monkeypatch.setattr(ct_bridge, "read_containers_from_excel",
+                        lambda p: [])
+
+    def locked(p, db):
+        raise PermissionError("file in use")
+    monkeypatch.setattr(ct_bridge, "update_excel_with_tracking", locked)
+
+    factory = _FakeShipsGoClient.factory(
+        listing=[{"id": inner["id"], "container_number": inner["container_number"]}],
+        get_results={inner["id"]: payload},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().refresh_all()
+
+    assert result["excel_write_failed"] is True
+    assert result["excel_read_failed"] is False
+    assert result["error"] is None
+    assert save_spy["tracking_writes"] == 1
+
+
+def test_refresh_all_unmatched_cns_returned(
+        isolated_data_dir, monkeypatch, patched_token, sample_workbook):
+    """CN exists in Excel and DB (no shipment_id), API doesn't know it →
+    flagged as unmatched, NOT failed."""
+    wb_path = sample_workbook(rows=("UNKN1111111",))
+    _link_workbook(wb_path)
+    factory = _FakeShipsGoClient.factory(listing=[], get_results={})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().refresh_all()
+
+    assert result["unmatched"] == ["UNKN1111111"]
+    # Failed list should NOT contain this CN — unmatched is its own bucket.
+    assert all(f["cn"] != "UNKN1111111" for f in result["failed"])
+
+
+def test_refresh_all_unmatched_excludes_dismissed(
+        isolated_data_dir, monkeypatch, patched_token, sample_workbook):
+    """A CN in Excel that the user has previously skipped should not
+    re-appear in unmatched on subsequent refreshes."""
+    wb_path = sample_workbook(rows=("DISM1111111",))
+    ct_config.save_config({
+        "company_name": "", "contact_email": "", "excel_path": str(wb_path),
+        "dark_mode": False, "dismissed": ["DISM1111111"],
+    })
+    factory = _FakeShipsGoClient.factory(listing=[], get_results={})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().refresh_all()
+
+    assert "DISM1111111" not in result["unmatched"]
+    # Dismissed CN must not be re-stubbed into the DB. If the DB ended up
+    # empty (the no-other-CNs case), no save fires and the file may not
+    # exist — both are correct.
+    if ct_config.TRACKING_DB_FILE.exists():
+        persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+        assert "DISM1111111" not in persisted
+
+
+def test_refresh_all_excel_rows_updated_count(
+        isolated_data_dir, monkeypatch, patched_token, sample_workbook):
+    """Successful Excel write → excel_rows_updated reflects the helper's
+    return value."""
+    wb_path = sample_workbook(rows=("MSCU1111111",))
+    _link_workbook(wb_path)
+    payload = _fixture_payload()
+    inner = payload["shipment"]
+    # Pre-populate db with the matching CN so phase 2 has work to do.
+    ct_config.TRACKING_DB_FILE.write_text(json.dumps({
+        "MSCU1111111": {"container_number": "MSCU1111111",
+                        "shipment_id": inner["id"]},
+    }))
+    factory = _FakeShipsGoClient.factory(
+        listing=[{"id": inner["id"], "container_number": "MSCU1111111"}],
+        get_results={inner["id"]: payload},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+    # Stub the writer so we don't depend on openpyxl's exact behavior;
+    # the contract under test is "the helper's return value flows through".
+    monkeypatch.setattr(ct_bridge, "update_excel_with_tracking",
+                        lambda p, db: 7)
+
+    result = Bridge().refresh_all()
+
+    assert result["excel_rows_updated"] == 7
+    assert result["excel_write_failed"] is False
+
+
+# ---------------------------------------------------------------------------
+# list_carriers / set_excel_path / create_excel_template / open_linked_excel
+# ---------------------------------------------------------------------------
+
+def test_list_carriers_returns_constant():
+    from container_tracker.core.constants import CARRIER_NAMES
+    assert Bridge().list_carriers() == list(CARRIER_NAMES)
+
+
+def test_set_excel_path_valid(isolated_data_dir, sample_workbook):
+    wb_path = sample_workbook()
+    result = Bridge().set_excel_path(str(wb_path))
+    assert result["ok"] is True
+    assert result["error"] is None
+    assert ct_config.load_config()["excel_path"] == str(wb_path)
+
+
+def test_set_excel_path_missing_file(isolated_data_dir):
+    ct_config.save_config({
+        "company_name": "", "contact_email": "", "excel_path": "",
+        "dark_mode": False, "dismissed": [],
+    })
+    result = Bridge().set_excel_path("C:/nope/missing.xlsx")
+    assert result["ok"] is False
+    assert "not found" in (result["error"] or "").lower()
+    # Config not mutated on failure.
+    assert ct_config.load_config()["excel_path"] == ""
+
+
+def test_set_excel_path_empty_clears(isolated_data_dir, sample_workbook):
+    wb_path = sample_workbook()
+    Bridge().set_excel_path(str(wb_path))
+    assert ct_config.load_config()["excel_path"] == str(wb_path)
+    result = Bridge().set_excel_path("")
+    assert result["ok"] is True
+    assert ct_config.load_config()["excel_path"] == ""
+
+
+def test_create_excel_template_writes_file_and_links(
+        isolated_data_dir, tmp_path):
+    target = tmp_path / "new_template.xlsx"
+    result = Bridge().create_excel_template(str(target))
+    assert result["ok"] is True
+    assert target.exists()
+    assert ct_config.load_config()["excel_path"] == str(target)
+
+
+def test_create_excel_template_invalid_dir(isolated_data_dir):
+    result = Bridge().create_excel_template("C:/nope/never/template.xlsx")
+    assert result["ok"] is False
+    assert "does not exist" in (result["error"] or "").lower()
+
+
+def test_open_linked_excel_no_link(isolated_data_dir):
+    ct_config.save_config({
+        "company_name": "", "contact_email": "", "excel_path": "",
+        "dark_mode": False, "dismissed": [],
+    })
+    result = Bridge().open_linked_excel()
+    assert result["ok"] is False
+    assert result["error"] == "No file linked"
+
+
+def test_open_linked_excel_invokes_startfile(
+        isolated_data_dir, monkeypatch, sample_workbook):
+    """os.startfile is Windows-only; mock it so the test runs anywhere."""
+    wb_path = sample_workbook()
+    _link_workbook(wb_path)
+    calls = []
+    monkeypatch.setattr(ct_bridge.os, "startfile",
+                        lambda p: calls.append(p), raising=False)
+    result = Bridge().open_linked_excel()
+    assert result["ok"] is True
+    assert calls == [str(wb_path)]
+
+
+# ---------------------------------------------------------------------------
+# register_unmatched / dismiss_unmatched
+# ---------------------------------------------------------------------------
+
+def test_register_unmatched_calls_create_shipment_per_cn(
+        isolated_data_dir, monkeypatch, patched_token):
+    factory = _FakeShipsGoClient.factory(
+        create_response={"id": "abc", "container_number": "X"},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    items = [
+        {"cn": "EVRG1111111", "carrier": "EVERGREEN"},
+        {"cn": "MSCU2222222", "carrier": "MSC"},
+    ]
+    result = Bridge().register_unmatched(items)
+
+    assert result["registered"] == 2
+    assert result["failed"] == []
+    assert result["credits_used"] == 2
+    calls = factory.captured["instance"].create_calls
+    assert calls == [
+        {"container_number": "EVRG1111111", "carrier_scac": "EGLV"},
+        {"container_number": "MSCU2222222", "carrier_scac": "MSCU"},
+    ]
+
+
+def test_register_unmatched_402_stops_batch(
+        isolated_data_dir, monkeypatch, patched_token):
+    """NOT_ENOUGH_CREDITS bails the loop — credits don't recover mid-batch."""
+    factory = _FakeShipsGoClient.factory(
+        create_response={"error": "NOT_ENOUGH_CREDITS"},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    items = [
+        {"cn": "AAAA1111111", "carrier": "EVERGREEN"},
+        {"cn": "BBBB2222222", "carrier": "MSC"},
+        {"cn": "CCCC3333333", "carrier": "MAERSK LINE"},
+    ]
+    result = Bridge().register_unmatched(items)
+
+    assert result["registered"] == 0
+    assert len(result["failed"]) == 1
+    assert result["failed"][0]["error"] == "NOT_ENOUGH_CREDITS"
+    # Only the first call was attempted; the loop broke immediately.
+    assert len(factory.captured["instance"].create_calls) == 1
+
+
+def test_register_unmatched_409_treated_as_success(
+        isolated_data_dir, monkeypatch, patched_token):
+    """already_exists isn't an error — counts as registered."""
+    factory = _FakeShipsGoClient.factory(
+        create_response={"already_exists": True, "id": "x"},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().register_unmatched(
+        [{"cn": "EVRG1111111", "carrier": "EVERGREEN"}])
+
+    assert result["registered"] == 1
+    assert result["failed"] == []
+    db = ct_config.load_tracking_db()
+    assert db["EVRG1111111"]["shipment_id"] == "x"
+
+
+def test_register_unmatched_no_token(isolated_data_dir, mock_keyring):
+    """Same fail-fast pattern as the rest of the bridge."""
+    result = Bridge().register_unmatched(
+        [{"cn": "EVRG1111111", "carrier": "EVERGREEN"}])
+    assert result["registered"] == 0
+    assert len(result["failed"]) == 1
+    assert "API token" in result["failed"][0]["error"]
+
+
+def test_register_unmatched_skips_blank_carrier(
+        isolated_data_dir, monkeypatch, patched_token):
+    factory = _FakeShipsGoClient.factory(
+        create_response={"id": "abc"},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    items = [
+        {"cn": "EVRG1111111", "carrier": ""},
+        {"cn": "MSCU2222222", "carrier": "MSC"},
+    ]
+    result = Bridge().register_unmatched(items)
+
+    # First item rejected before ShipsGo call; second succeeds.
+    assert result["registered"] == 1
+    assert len(result["failed"]) == 1
+    assert result["failed"][0]["error"] == "missing carrier"
+
+
+def test_dismiss_unmatched_appends_to_config(isolated_data_dir):
+    ct_config.save_config({
+        "company_name": "", "contact_email": "", "excel_path": "",
+        "dark_mode": False, "dismissed": [],
+    })
+    result = Bridge().dismiss_unmatched(["AAAA1111111", "bbbb2222222"])
+    assert result["ok"] is True
+    cfg = ct_config.load_config()
+    assert cfg["dismissed"] == ["AAAA1111111", "BBBB2222222"]
+
+
+def test_dismiss_unmatched_idempotent(isolated_data_dir):
+    ct_config.save_config({
+        "company_name": "", "contact_email": "",
+        "excel_path": "", "dark_mode": False,
+        "dismissed": ["EXIST1111111"],
+    })
+    Bridge().dismiss_unmatched(["EXIST1111111", "NEWXX2222222"])
+    Bridge().dismiss_unmatched(["EXIST1111111", "NEWXX2222222"])
+    cfg = ct_config.load_config()
+    # Each CN appears exactly once even after two dismiss calls.
+    assert cfg["dismissed"].count("EXIST1111111") == 1
+    assert cfg["dismissed"].count("NEWXX2222222") == 1

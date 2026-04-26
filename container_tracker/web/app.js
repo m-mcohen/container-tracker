@@ -14,6 +14,14 @@
     async refresh_one(cn)   { return await window.pywebview.api.refresh_one(cn); },
     async add_container(cn, carrier) { return await window.pywebview.api.add_container(cn, carrier); },
     async remove_container(cn) { return await window.pywebview.api.remove_container(cn); },
+    async list_carriers()   { return await window.pywebview.api.list_carriers(); },
+    async set_excel_path(p) { return await window.pywebview.api.set_excel_path(p); },
+    async create_excel_template(p) { return await window.pywebview.api.create_excel_template(p); },
+    async pick_excel_file() { return await window.pywebview.api.pick_excel_file(); },
+    async pick_excel_save_path() { return await window.pywebview.api.pick_excel_save_path(); },
+    async open_linked_excel() { return await window.pywebview.api.open_linked_excel(); },
+    async register_unmatched(items) { return await window.pywebview.api.register_unmatched(items); },
+    async dismiss_unmatched(cns) { return await window.pywebview.api.dismiss_unmatched(cns); },
     async ping()            { return await window.pywebview.api.ping(); },
   };
 
@@ -44,6 +52,43 @@
   }
   function showError(message) { _showToast(message, "error"); }
   function showInfo(message)  { _showToast(message, "info"); }
+
+  /* ─────────────────────────────────────────────────────────────────────
+   * Excel-related banners (Step 6.5). Notice elements live in the
+   * dashboard's notification stack; helpers toggle the [hidden] attr
+   * and stash CN payloads on the element via dataset for later reads
+   * by the click handlers.
+   * ──────────────────────────────────────────────────────────────────── */
+  function showUnmatchedBanner(cns) {
+    const b = document.getElementById("notice-unmatched");
+    if (!b) return;
+    const titleEl = document.getElementById("notice-unmatched-title");
+    if (titleEl) {
+      const n = cns.length;
+      titleEl.textContent = `${n} new container${n === 1 ? "" : "s"} found in your spreadsheet.`;
+    }
+    b.dataset.cns = cns.join(",");
+    b.hidden = false;
+  }
+  function hideUnmatchedBanner() {
+    const b = document.getElementById("notice-unmatched");
+    if (!b) return;
+    b.hidden = true;
+    b.dataset.cns = "";
+  }
+  function showExcelWriteFailedBanner() {
+    const b = document.getElementById("notice-excel-write-failed");
+    if (b) b.hidden = false;
+  }
+  function hideExcelWriteFailedBanner() {
+    const b = document.getElementById("notice-excel-write-failed");
+    if (b) b.hidden = true;
+  }
+
+  /* Carrier dropdown options come from the bridge once at boot, then
+   * cached. Keeps the register-unmatched modal in sync with CARRIER_NAMES
+   * without baking the list into JS. */
+  let CARRIERS = [];
 
   /* ─────────────────────────────────────────────────────────────────────
    * "Last refreshed" indicator. Driven by the time the user clicks
@@ -221,6 +266,14 @@
       // Settings load isn't fatal — log and continue.
       console.warn('[bridge] get_settings failed', e);
     }
+    try {
+      // Cache the carrier list once. The register-unmatched modal builds
+      // its dropdowns from this; the add modal's options are baked in HTML
+      // so it doesn't need this list (yet).
+      CARRIERS = await Bridge.list_carriers();
+    } catch (e) {
+      console.warn('[bridge] list_carriers failed', e);
+    }
     updateLastRefresh();
   }
   window.addEventListener('pywebviewready', loadInitialData);
@@ -239,6 +292,8 @@
         ? "••••••••••••••••"
         : "Enter your ShipsGo API key";
     }
+    const excelEl = document.getElementById("excel-current-path");
+    if (excelEl) excelEl.textContent = s.excel_path || "No file linked";
   }
 
   async function handleSaveSettings() {
@@ -317,7 +372,7 @@
     app.classList.add("modal-add-open");
   });
   document.querySelectorAll("[data-close-modal]").forEach(b =>
-    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-remove-open"))
+    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-remove-open", "modal-register-open"))
   );
   ["modal-add", "modal-remove"].forEach(id => {
     document.getElementById(id).addEventListener("click", (e) => {
@@ -472,6 +527,23 @@
           showError(`Refreshed ${result.updated} containers; ${result.failed.length} failed. See console.`);
           console.warn("[refresh] failed:", result.failed);
         }
+        // Step 6.5: Excel-related result fields. Read failures don't abort
+        // the data sync — surface as toast. Write failures get a banner
+        // so the user knows the next refresh needs Excel closed.
+        if (result.excel_read_failed) {
+          showError("Couldn't read Excel — close it and click Refresh to sync the container list.");
+        }
+        if (result.excel_write_failed) {
+          showExcelWriteFailedBanner();
+        } else {
+          hideExcelWriteFailedBanner();
+        }
+        const unmatched = result.unmatched || [];
+        if (unmatched.length > 0) {
+          showUnmatchedBanner(unmatched);
+        } else {
+          hideUnmatchedBanner();
+        }
       }
     } catch (e) {
       showError(`Refresh failed: ${(e && e.message) || e}`);
@@ -486,7 +558,7 @@
   /* ─── Keyboard shortcuts ─── */
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      app.classList.remove("drawer-open", "modal-add-open", "modal-remove-open");
+      app.classList.remove("drawer-open", "modal-add-open", "modal-remove-open", "modal-register-open");
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
@@ -495,13 +567,208 @@
     }
   });
 
-  /* Banner dismiss */
+  /* Banner dismiss (update banner only — destructive remove is fine
+   * here because update-banner is only shown once per session). */
   document.querySelectorAll(".banner .dismiss").forEach(b =>
     b.addEventListener("click", () => b.closest(".banner").remove())
   );
 
-  /* Notice dismiss (skip / register buttons both clear the notice for the demo) */
-  document.querySelectorAll("#notice-unmatched .btn-sm").forEach(b =>
-    b.addEventListener("click", () => document.getElementById("notice-unmatched").remove())
-  );
+  /* Excel-write-failed dismiss is non-destructive — the banner re-shows
+   * on next refresh if the condition recurs. */
+  const excelDismissBtn = document.getElementById("notice-excel-dismiss");
+  if (excelDismissBtn) {
+    excelDismissBtn.addEventListener("click", hideExcelWriteFailedBanner);
+  }
+
+  /* ─── Unmatched-CN flow (Step 6.5) ─── */
+  function getUnmatchedCNs() {
+    const banner = document.getElementById("notice-unmatched");
+    if (!banner || banner.hidden) return [];
+    return (banner.dataset.cns || "").split(",").filter(Boolean);
+  }
+
+  function openRegisterUnmatchedModal() {
+    const cns = getUnmatchedCNs();
+    if (cns.length === 0) return;
+    const list = document.getElementById("register-unmatched-list");
+    if (!list) return;
+    const carriers = (CARRIERS && CARRIERS.length > 0)
+      ? CARRIERS
+      : ["MAERSK LINE", "MSC", "CMA CGM", "HAPAG LLOYD", "COSCO",
+         "EVERGREEN", "ONE", "YANG MING", "ZIM", "HMM", "OOCL", "PIL", "OTHER"];
+    list.innerHTML = cns.map(cn => {
+      const opts = ['<option value="">Select carrier…</option>']
+        .concat(carriers.map(c => `<option value="${c}">${c}</option>`))
+        .join("");
+      return `
+        <div class="register-row">
+          <span class="register-cn">${cn}</span>
+          <select class="register-carrier" data-cn="${cn}">${opts}</select>
+        </div>`;
+    }).join("");
+    const cost = document.getElementById("register-cost");
+    if (cost) cost.textContent = String(cns.length);
+    const errEl = document.getElementById("register-error");
+    if (errEl) { errEl.hidden = true; errEl.textContent = ""; }
+    app.classList.add("modal-register-open");
+  }
+
+  async function handleDismissUnmatched() {
+    const cns = getUnmatchedCNs();
+    if (cns.length === 0) return;
+    let result;
+    try {
+      result = await Bridge.dismiss_unmatched(cns);
+    } catch (e) {
+      showError(`Dismiss failed: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!result.ok) {
+      showError(`Dismiss failed: ${result.error || "unknown"}`);
+      return;
+    }
+    hideUnmatchedBanner();
+    showInfo(`Skipped ${cns.length} container${cns.length === 1 ? "" : "s"}. They won't appear again.`);
+  }
+
+  async function handleRegisterUnmatchedSubmit() {
+    const errEl = document.getElementById("register-error");
+    if (errEl) { errEl.hidden = true; errEl.textContent = ""; }
+    const selects = document.querySelectorAll("#register-unmatched-list .register-carrier");
+    const items = [];
+    for (const s of selects) {
+      if (!s.value) {
+        if (errEl) {
+          errEl.textContent = "Pick a carrier for every container, or click Cancel and use Skip.";
+          errEl.hidden = false;
+        }
+        return;
+      }
+      items.push({ cn: s.dataset.cn, carrier: s.value });
+    }
+    let result;
+    try {
+      result = await Bridge.register_unmatched(items);
+    } catch (e) {
+      if (errEl) {
+        errEl.textContent = `Register failed: ${(e && e.message) || e}`;
+        errEl.hidden = false;
+      }
+      return;
+    }
+    app.classList.remove("modal-register-open");
+    hideUnmatchedBanner();
+    if (result.failed && result.failed.length > 0) {
+      const credits = result.failed.find(f => f.error === "NOT_ENOUGH_CREDITS");
+      if (credits) {
+        showError("ShipsGo: not enough credits — registration stopped.");
+      } else {
+        showError(`Registered ${result.registered}; ${result.failed.length} failed. See console.`);
+        console.warn("[register_unmatched] failed:", result.failed);
+      }
+    } else if (result.registered > 0) {
+      showInfo(`Registered ${result.registered} container${result.registered === 1 ? "" : "s"}. Refreshing…`);
+    }
+    // Pull the fresh shipment data for newly-registered CNs.
+    await handleRefresh();
+  }
+
+  const noticeRegisterBtn = document.getElementById("notice-register");
+  if (noticeRegisterBtn) {
+    noticeRegisterBtn.addEventListener("click", openRegisterUnmatchedModal);
+  }
+  const noticeSkipBtn = document.getElementById("notice-skip");
+  if (noticeSkipBtn) {
+    noticeSkipBtn.addEventListener("click", handleDismissUnmatched);
+  }
+  const registerSubmitBtn = document.getElementById("btn-register-submit");
+  if (registerSubmitBtn) {
+    registerSubmitBtn.addEventListener("click", handleRegisterUnmatchedSubmit);
+  }
+  // Backdrop / Cancel close — extend the existing modal close handlers.
+  const registerModal = document.getElementById("modal-register-unmatched");
+  if (registerModal) {
+    registerModal.addEventListener("click", (e) => {
+      if (e.target.id === "modal-register-unmatched") {
+        app.classList.remove("modal-register-open");
+      }
+    });
+  }
+
+  /* ─── Settings: linked-spreadsheet card (Step 6.5) ─── */
+  async function handleExcelBrowse() {
+    let pick;
+    try {
+      pick = await Bridge.pick_excel_file();
+    } catch (e) {
+      showError(`Browse failed: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!pick || !pick.path) {
+      // User cancelled; pick.error is null in that case. Real errors land
+      // in pick.error and we surface them.
+      if (pick && pick.error) showError(`Browse failed: ${pick.error}`);
+      return;
+    }
+    let r;
+    try {
+      r = await Bridge.set_excel_path(pick.path);
+    } catch (e) {
+      showError(`Couldn't link file: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!r.ok) {
+      showError(`Couldn't link file: ${r.error || "unknown"}`);
+      return;
+    }
+    await loadSettings();
+    showInfo("Excel file linked.");
+  }
+
+  async function handleExcelCreate() {
+    let pick;
+    try {
+      pick = await Bridge.pick_excel_save_path();
+    } catch (e) {
+      showError(`Create template failed: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!pick || !pick.path) {
+      if (pick && pick.error) showError(`Create template failed: ${pick.error}`);
+      return;
+    }
+    let r;
+    try {
+      r = await Bridge.create_excel_template(pick.path);
+    } catch (e) {
+      showError(`Create template failed: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!r.ok) {
+      showError(`Create template failed: ${r.error || "unknown"}`);
+      return;
+    }
+    await loadSettings();
+    showInfo("Template created and linked.");
+  }
+
+  async function handleExcelOpen() {
+    let r;
+    try {
+      r = await Bridge.open_linked_excel();
+    } catch (e) {
+      showError(`Couldn't open file: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!r.ok) {
+      showError(`Couldn't open file: ${r.error || "unknown"}`);
+    }
+  }
+
+  const excelBrowseBtn = document.getElementById("btn-excel-browse");
+  if (excelBrowseBtn) excelBrowseBtn.addEventListener("click", handleExcelBrowse);
+  const excelCreateBtn = document.getElementById("btn-excel-create");
+  if (excelCreateBtn) excelCreateBtn.addEventListener("click", handleExcelCreate);
+  const excelOpenBtn = document.getElementById("btn-excel-open");
+  if (excelOpenBtn) excelOpenBtn.addEventListener("click", handleExcelOpen);
 

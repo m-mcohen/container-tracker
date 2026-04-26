@@ -62,12 +62,23 @@
           <div class="notice" id="notice-unmatched" hidden>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
             <div class="notice-body">
-              <strong class="notice-title"></strong>
+              <strong class="notice-title" id="notice-unmatched-title"></strong>
               <span class="notice-detail">They aren't on ShipsGo yet. Register them now or skip until next refresh.</span>
             </div>
             <div class="notice-actions">
               <button class="btn btn-sm" id="notice-skip">Skip</button>
-              <button class="btn btn-sm btn-primary" id="notice-register"></button>
+              <button class="btn btn-sm btn-primary" id="notice-register">Register all</button>
+            </div>
+          </div>
+          <!-- Excel-write-failed banner — hidden until refresh_all returns excel_write_failed=true. Persists until the next successful refresh clears it. -->
+          <div class="notice notice-warning" id="notice-excel-write-failed" hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="notice-body">
+              <strong class="notice-title">Excel write skipped</strong>
+              <span class="notice-detail">Close the workbook in Excel and click Refresh to sync. Tracking data was still updated.</span>
+            </div>
+            <div class="notice-actions">
+              <button class="btn btn-sm" id="notice-excel-dismiss">Dismiss</button>
             </div>
           </div>
         </div>
@@ -273,15 +284,15 @@
                   <div class="xls-icon">XLSX</div>
                   <div class="meta">
                     <div class="label">Current file</div>
-                    <div class="path">C:\Users\michael\Documents\Container_Tracking.xlsx</div>
+                    <div class="path" id="excel-current-path">No file linked</div>
                   </div>
                   <div class="actions">
-                    <button class="btn btn-sm">Open in Excel</button>
-                    <button class="btn btn-sm">Change…</button>
+                    <button class="btn btn-sm" id="btn-excel-open">Open in Excel</button>
+                    <button class="btn btn-sm" id="btn-excel-browse">Change…</button>
                   </div>
                 </div>
                 <div class="row">
-                  <button class="btn">Create template</button>
+                  <button class="btn" id="btn-excel-create">Create template</button>
                   <span class="hint">Generates a blank workbook with a "ContainerTracking" Excel Table.</span>
                 </div>
               </div>
@@ -449,6 +460,27 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Add &amp; track
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Register unmatched containers (Step 6.5) ─── -->
+  <div class="modal-backdrop" id="modal-register-unmatched">
+    <div class="modal" role="dialog" aria-labelledby="modal-register-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-register-title">Register containers with ShipsGo</div>
+        <div class="modal-sub"><span id="register-cost">0</span> credits will be used (~$2 USD each). Already-tracked containers are free.</div>
+      </div>
+      <div class="modal-body">
+        <div id="register-unmatched-list" class="register-list"></div>
+        <div class="callout warning" style="margin-top:14px;">
+          Pick a carrier for each container. Refreshes are free; only the initial register call uses credits.
+        </div>
+        <div class="field-error" id="register-error" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary" id="btn-register-submit">Register</button>
       </div>
     </div>
   </div>

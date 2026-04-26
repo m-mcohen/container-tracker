@@ -932,6 +932,47 @@
   }
   .app.modal-add-open #modal-add { display: flex; }
   .app.modal-remove-open #modal-remove { display: flex; }
+  .app.modal-register-open #modal-register-unmatched { display: flex; }
+  /* Register-unmatched modal is wider — fits CN + carrier dropdown rows. */
+  #modal-register-unmatched .modal { width: 520px; }
+  .register-list {
+    max-height: 360px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 2px;
+  }
+  .register-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+  }
+  .register-cn {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .register-carrier { min-width: 200px; }
+
+  /* Notice variant: warning (Excel-write-failed). Reuses .notice's
+   * layout and only re-tints the background + accent. */
+  .notice.notice-warning {
+    background: #fef3cd;
+    border-color: #fadf85;
+    color: #7a4a00;
+  }
+  [data-theme="dark"] .notice.notice-warning {
+    background: rgba(240, 173, 78, 0.10);
+    border-color: rgba(240, 173, 78, 0.35);
+    color: #f4c577;
+  }
   .modal {
     width: 460px;
     max-width: calc(100vw - 48px);

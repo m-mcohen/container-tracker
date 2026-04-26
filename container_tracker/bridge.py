@@ -62,14 +62,22 @@ Step 6's mutations will need to revisit.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from container_tracker.core import config as ct_config
 from container_tracker.core import credentials as ct_credentials
 from container_tracker.core import status as ct_status
 from container_tracker.core.api import ShipsGoClient, resolve_scac
+from container_tracker.core.constants import CARRIER_NAMES
+from container_tracker.core.excel import (
+    create_template_excel,
+    read_containers_from_excel,
+    update_excel_with_tracking,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -177,39 +185,86 @@ class Bridge:
     # --- Refresh -----------------------------------------------------------
 
     def refresh_all(self) -> dict:
-        """Refresh every container in tracking_data.json.
+        """Refresh every container in tracking_data.json + sync Excel.
 
-        Replicates the legacy GUI's two-phase refresh
-        (container_tracker_gui.py:763-846): one ``list_shipments(take=100)``
-        to build a sid/cn map, then per-container ``get_shipment(sid)``
-        looped sequentially. ``tracking_data.json`` is written exactly
-        once at the end.
+        Replicates the legacy GUI's three-phase refresh
+        (container_tracker_gui.py:763-846):
+          1. Read CNs from the linked Excel workbook (Step 6.5) and merge
+             discovered CNs into the in-memory db as stubs (skipping any
+             cn in cfg["dismissed"]).
+          2. ``list_shipments(take=100)`` to build a cn→shipment map.
+          3. Per-container ``get_shipment(sid)`` looped sequentially.
+          4. Write tracking_data.json once.
+          5. Write the linked Excel workbook (Step 6.5).
 
-        Returns ``{"updated": int, "failed": [{"cn", "error"}],
-        "duration_ms": int, "error": str | None}``. **Never raises** for
-        operational failures — JS branches on ``result["error"]`` /
-        ``result["failed"]`` uniformly.
+        Excel I/O failures are surfaced as flags in the returned dict but
+        do **not** abort the refresh — improvement over the legacy GUI's
+        early-return on locked-file read. The JS side branches on
+        ``excel_read_failed`` / ``excel_write_failed`` to render banners.
+
+        Returns the dict shape consumed by web/app.js handleRefresh:
+          ``{updated, failed, duration_ms, error,
+             excel_read_failed, excel_write_failed,
+             unmatched, excel_rows_updated}``
+        Never raises for operational failures.
         """
+        cfg = ct_config.load_config()
+        excel_path = (cfg.get("excel_path") or "").strip()
+        dismissed = set(s.upper() for s in (cfg.get("dismissed") or []))
+
+        base = {
+            "updated": 0,
+            "failed": [],
+            "duration_ms": 0,
+            "error": None,
+            "excel_read_failed": False,
+            "excel_write_failed": False,
+            "unmatched": [],
+            "excel_rows_updated": 0,
+        }
+
         token = ct_credentials.get_api_token()
         if not token:
-            return {"updated": 0, "failed": [], "duration_ms": 0,
-                    "error": "API token not configured"}
-
-        db = ct_config.load_tracking_db()
-        if not db:
-            return {"updated": 0, "failed": [], "duration_ms": 0, "error": None}
+            return {**base, "error": "API token not configured"}
 
         started = time.monotonic()
+        db = ct_config.load_tracking_db()
+
+        # Phase 0: read CNs from Excel and merge as stubs (legacy line 781-793).
+        excel_read_failed = False
+        if excel_path and Path(excel_path).exists():
+            try:
+                for raw in read_containers_from_excel(excel_path):
+                    cn_up = (raw or "").strip().upper()
+                    if not cn_up:
+                        continue
+                    if cn_up in db:
+                        continue
+                    if cn_up in dismissed:
+                        continue
+                    db[cn_up] = {"container_number": cn_up,
+                                 "last_refreshed": None}
+            except Exception as e:
+                logger.warning("Excel read failed: %s", e)
+                excel_read_failed = True
+
+        if not db:
+            # Nothing to refresh and no API call needed.
+            return {**base,
+                    "duration_ms": int((time.monotonic() - started) * 1000),
+                    "excel_read_failed": excel_read_failed}
+
         client = ShipsGoClient(token)
 
-        # Phase 1: list_shipments map (legacy line 768)
+        # Phase 1: list_shipments map (legacy line 768).
         try:
             listing = client.list_shipments(take=100) or []
         except Exception as e:
             return {
-                "updated": 0, "failed": [],
+                **base,
                 "duration_ms": int((time.monotonic() - started) * 1000),
                 "error": f"list_shipments failed: {e}",
+                "excel_read_failed": excel_read_failed,
             }
 
         by_cn: dict[str, dict] = {}
@@ -220,15 +275,19 @@ class Bridge:
             if cn_key:
                 by_cn[cn_key] = s
 
-        # Phase 2: per-container get_shipment(sid) (legacy line 803-819)
+        # Phase 2: per-container get_shipment(sid) (legacy line 803-819).
+        # CNs without a resolvable shipment_id (typically Excel-discovered
+        # stubs) land in ``unmatched`` rather than ``failed`` — that's the
+        # signal the JS side uses to fire the post-refresh register banner.
         updated = 0
         failed: list[dict] = []
+        unmatched: list[str] = []
         for cn, rec in db.items():
             cn_up = cn.upper()
             sid = rec.get("shipment_id") or (by_cn.get(cn_up) or {}).get("id")
             if not sid:
-                failed.append({"cn": cn_up,
-                               "error": "no shipment id (not on ShipsGo)"})
+                if cn_up not in dismissed:
+                    unmatched.append(cn_up)
                 continue
             try:
                 payload = client.get_shipment(sid)
@@ -243,14 +302,29 @@ class Bridge:
                 logger.warning("refresh failed for %s: %s", cn_up, e)
                 failed.append({"cn": cn_up, "error": str(e)})
 
-        # Single write at end (legacy line 820 — minimize disk churn).
+        # Single tracking_data.json write at end (legacy line 820).
         ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
+
+        # Phase 3: write back to Excel (legacy line 821-829).
+        excel_write_failed = False
+        excel_rows_updated = 0
+        if excel_path and Path(excel_path).exists():
+            try:
+                excel_rows_updated = (
+                    update_excel_with_tracking(excel_path, db) or 0)
+            except Exception as e:
+                logger.warning("Excel write failed: %s", e)
+                excel_write_failed = True
 
         return {
             "updated": updated,
             "failed": failed,
             "duration_ms": int((time.monotonic() - started) * 1000),
             "error": None,
+            "excel_read_failed": excel_read_failed,
+            "excel_write_failed": excel_write_failed,
+            "unmatched": unmatched,
+            "excel_rows_updated": excel_rows_updated,
         }
 
     def refresh_one(self, cn: str) -> dict:
@@ -405,6 +479,7 @@ class Bridge:
             "company_name": cfg.get("company_name", ""),
             "api_token_present": bool(ct_credentials.get_api_token()),
             "theme": "dark" if cfg.get("dark_mode") else "light",
+            "excel_path": cfg.get("excel_path", "") or "",
         }
 
     def save_settings(self, company_name: str, api_token=None) -> dict:
@@ -424,3 +499,197 @@ class Bridge:
         except Exception as e:
             logger.exception("save_settings failed")
             return {"ok": False, "error": str(e)}
+
+    # --- Excel link management (Step 6.5) ---------------------------------
+
+    def list_carriers(self) -> list[str]:
+        """Return the dropdown carrier list. Sourced from CARRIER_NAMES so
+        the JS-side register-unmatched modal stays in sync with add."""
+        return list(CARRIER_NAMES)
+
+    def set_excel_path(self, path: str) -> dict:
+        """Persist the linked-workbook path to config.json. Empty string
+        clears the link. Validates that a non-empty path exists; missing
+        files return ok=False without writing config."""
+        try:
+            p = (path or "").strip()
+            cfg = ct_config.load_config()
+            if not p:
+                cfg["excel_path"] = ""
+                ct_config.save_config(cfg)
+                return {"ok": True, "error": None, "path": ""}
+            if not Path(p).exists():
+                return {"ok": False, "error": "File not found", "path": p}
+            cfg["excel_path"] = p
+            ct_config.save_config(cfg)
+            return {"ok": True, "error": None, "path": p}
+        except Exception as e:
+            logger.exception("set_excel_path failed")
+            return {"ok": False, "error": str(e), "path": path or ""}
+
+    def create_excel_template(self, path: str) -> dict:
+        """Generate a fresh Container_Tracking template at ``path`` and
+        link it. Validates the parent directory exists; on success the
+        path is written to ``cfg["excel_path"]``."""
+        try:
+            p = (path or "").strip()
+            if not p:
+                return {"ok": False, "error": "No path supplied", "path": ""}
+            target = Path(p)
+            if not target.parent.exists():
+                return {"ok": False,
+                        "error": f"Folder does not exist: {target.parent}",
+                        "path": p}
+            create_template_excel(p)
+            cfg = ct_config.load_config()
+            cfg["excel_path"] = p
+            ct_config.save_config(cfg)
+            return {"ok": True, "error": None, "path": p}
+        except Exception as e:
+            logger.exception("create_excel_template failed")
+            return {"ok": False, "error": str(e), "path": path or ""}
+
+    def open_linked_excel(self) -> dict:
+        """Open the currently-linked workbook in Excel. Returns ok=False
+        if no link is set or the file no longer exists."""
+        cfg = ct_config.load_config()
+        p = (cfg.get("excel_path") or "").strip()
+        if not p:
+            return {"ok": False, "error": "No file linked"}
+        if not Path(p).exists():
+            return {"ok": False, "error": "Linked file not found"}
+        try:
+            os.startfile(p)  # type: ignore[attr-defined]
+            return {"ok": True, "error": None}
+        except Exception as e:
+            logger.warning("open_linked_excel failed: %s", e)
+            return {"ok": False, "error": str(e)}
+
+    def pick_excel_file(self) -> dict:
+        """Show the native Open dialog and return the chosen path. The
+        bridge owns this call (rather than JS) so it can reach
+        ``webview.windows[0]``."""
+        try:
+            import webview  # local import: tests don't need pywebview installed
+            wins = getattr(webview, "windows", None) or []
+            if not wins:
+                return {"path": None, "error": "No window"}
+            result = wins[0].create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=("Excel Files (*.xlsx)", "All files (*.*)"),
+            )
+            if not result:
+                return {"path": None, "error": None}
+            chosen = result[0] if isinstance(result, (list, tuple)) else result
+            return {"path": chosen, "error": None}
+        except Exception as e:
+            logger.warning("pick_excel_file failed: %s", e)
+            return {"path": None, "error": str(e)}
+
+    def pick_excel_save_path(self) -> dict:
+        """Show the native Save-As dialog for a new template."""
+        try:
+            import webview
+            wins = getattr(webview, "windows", None) or []
+            if not wins:
+                return {"path": None, "error": "No window"}
+            result = wins[0].create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename="Container_Tracking.xlsx",
+                file_types=("Excel Files (*.xlsx)",),
+            )
+            if not result:
+                return {"path": None, "error": None}
+            chosen = result[0] if isinstance(result, (list, tuple)) else result
+            return {"path": chosen, "error": None}
+        except Exception as e:
+            logger.warning("pick_excel_save_path failed: %s", e)
+            return {"path": None, "error": str(e)}
+
+    # --- Unmatched-CN flow (Step 6.5) -------------------------------------
+
+    def register_unmatched(self, items: list) -> dict:
+        """Register a batch of Excel-discovered CNs with ShipsGo.
+
+        ``items`` is a list of ``{"cn": str, "carrier": str}`` entries
+        sourced from the JS register-unmatched modal. Each entry's
+        ``carrier`` is a display name (CARRIER_NAMES); the bridge
+        resolves it to a SCAC before calling ``create_shipment``.
+
+        HTTP 402 (NOT_ENOUGH_CREDITS) stops further attempts immediately
+        — credits don't come back across the loop, so subsequent calls
+        would all fail the same way. 409 already_exists is treated as
+        success, matching add_container's contract.
+        """
+        registered = 0
+        failures: list[dict] = []
+        if not isinstance(items, list) or not items:
+            return {"registered": 0, "failed": [], "credits_used": 0}
+
+        token = ct_credentials.get_api_token()
+        if not token:
+            return {"registered": 0,
+                    "failed": [{"cn": "", "error": "API token not configured"}],
+                    "credits_used": 0}
+
+        db = ct_config.load_tracking_db()
+        client = ShipsGoClient(token)
+
+        for entry in items:
+            if not isinstance(entry, dict):
+                failures.append({"cn": "", "error": "malformed entry"})
+                continue
+            cn_up = (entry.get("cn") or "").strip().upper()
+            carrier = (entry.get("carrier") or "").strip()
+            if not cn_up:
+                failures.append({"cn": cn_up, "error": "missing cn"})
+                continue
+            if not carrier:
+                failures.append({"cn": cn_up, "error": "missing carrier"})
+                continue
+            scac = resolve_scac(carrier)
+            try:
+                resp = client.create_shipment(container_number=cn_up,
+                                              carrier_scac=scac)
+            except Exception as e:
+                failures.append({"cn": cn_up, "error": str(e)})
+                continue
+            if isinstance(resp, dict) and resp.get("error") == "NOT_ENOUGH_CREDITS":
+                failures.append({"cn": cn_up, "error": "NOT_ENOUGH_CREDITS"})
+                # Bail: credits won't recover within this batch.
+                break
+            sid = (resp.get("id") or resp.get("shipment_id")
+                   if isinstance(resp, dict) else None)
+            rec = db.get(cn_up) or {"container_number": cn_up}
+            rec["shipment_id"] = sid
+            rec["carrier"] = carrier
+            rec["scac"] = scac
+            db[cn_up] = rec
+            registered += 1
+
+        ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
+        # Credits used == successful registrations. 409 already_exists
+        # also counts as registered but doesn't actually consume a credit;
+        # the UI message already warns that re-registration is free.
+        return {"registered": registered, "failed": failures,
+                "credits_used": registered}
+
+    def dismiss_unmatched(self, cns: list) -> dict:
+        """Add a batch of CNs to ``cfg["dismissed"]`` so future refreshes
+        don't re-prompt for them. Idempotent."""
+        try:
+            cfg = ct_config.load_config()
+            existing = list(cfg.get("dismissed") or [])
+            seen = set(s.upper() for s in existing)
+            for cn in cns or []:
+                cn_up = (cn or "").strip().upper()
+                if cn_up and cn_up not in seen:
+                    existing.append(cn_up)
+                    seen.add(cn_up)
+            cfg["dismissed"] = existing
+            ct_config.save_config(cfg)
+            return {"ok": True, "dismissed": existing}
+        except Exception as e:
+            logger.exception("dismiss_unmatched failed")
+            return {"ok": False, "dismissed": [], "error": str(e)}
