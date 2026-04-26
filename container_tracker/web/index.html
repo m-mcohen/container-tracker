@@ -198,7 +198,7 @@
         <div class="page-title">Settings</div>
         <div class="spacer"></div>
         <button class="btn" data-view="dashboard">Cancel</button>
-        <button class="btn btn-primary">Save changes</button>
+        <button class="btn btn-primary" id="btn-settings-save">Save changes</button>
       </header>
 
       <div class="content">
@@ -253,7 +253,7 @@
                 <div class="field">
                   <label>API key</label>
                   <div class="row">
-                    <input type="password" value="••••••••••••••••••••••••••••••••••••" style="flex:1" />
+                    <input type="password" id="settings-token" value="" placeholder="Enter your ShipsGo API key" style="flex:1" />
                     <button class="btn">Show</button>
                     <button class="btn btn-primary">Test</button>
                   </div>
@@ -439,10 +439,11 @@
         <div class="callout warning">
           <strong>Heads up:</strong> if this container is already tracked on your ShipsGo account, no credit will be charged.
         </div>
+        <div class="field-error" id="add-error" hidden></div>
       </div>
       <div class="modal-footer">
         <button class="btn" data-close-modal>Cancel</button>
-        <button class="btn btn-primary">
+        <button class="btn btn-primary" id="btn-add-submit">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Add &amp; track
         </button>
@@ -464,12 +465,14 @@
       </div>
       <div class="modal-footer">
         <button class="btn" data-close-modal>Cancel</button>
-        <button class="btn btn-danger">Remove from app</button>
+        <button class="btn btn-danger" id="btn-remove-confirm">Remove from app</button>
       </div>
     </div>
   </div>
 
 </div>
+
+<div id="toast-container" aria-live="polite"></div>
 
 
 <script src="app.js"></script>

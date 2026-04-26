@@ -30,12 +30,13 @@ def extract_fields(shipment: dict) -> dict:
         shipment = shipment["shipment"]
 
     f = {"status": "", "vessel": "", "pol": "", "pod": "", "eta": "", "etd": "",
-         "carrier": "", "transit_pct": "", "original_eta": "", "delay_days": ""}
+         "carrier": "", "scac": "", "transit_pct": "", "original_eta": "", "delay_days": ""}
     f["status"] = shipment.get("status", "")
 
     cr = shipment.get("carrier") or {}
     if isinstance(cr, dict):
         f["carrier"] = cr.get("name", cr.get("scac", ""))
+        f["scac"] = cr.get("scac", "") or ""
 
     route = shipment.get("route") or {}
 

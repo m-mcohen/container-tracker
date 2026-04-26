@@ -52,6 +52,16 @@ class TestExtractFields:
     def test_extracts_carrier_name(self, shipment):
         assert extract_fields(shipment)["carrier"] == "EVERGREEN MARINE CORP"
 
+    def test_extracts_scac(self, shipment):
+        # extract_fields preserves carrier.scac so the bridge does not have
+        # to reverse-map a long carrier name back to its 4-letter code.
+        assert extract_fields(shipment)["scac"] == "EGLV"
+
+    def test_scac_empty_when_carrier_missing_scac(self):
+        # When carrier.scac is absent, scac is "" not None — uniform shape.
+        out = extract_fields({"carrier": {"name": "SOME LINE"}})
+        assert out["scac"] == ""
+
     def test_extracts_pol_pod(self, shipment):
         f = extract_fields(shipment)
         assert f["pol"] == "Kaohsiung, TW"

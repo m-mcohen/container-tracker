@@ -9,8 +9,63 @@
     async list_containers() { return await window.pywebview.api.list_containers(); },
     async get_container(no) { return await window.pywebview.api.get_container(no); },
     async get_settings()    { return await window.pywebview.api.get_settings(); },
+    async save_settings(company_name, api_token) { return await window.pywebview.api.save_settings(company_name, api_token); },
+    async refresh_all()     { return await window.pywebview.api.refresh_all(); },
+    async refresh_one(cn)   { return await window.pywebview.api.refresh_one(cn); },
+    async add_container(cn, carrier) { return await window.pywebview.api.add_container(cn, carrier); },
+    async remove_container(cn) { return await window.pywebview.api.remove_container(cn); },
     async ping()            { return await window.pywebview.api.ping(); },
   };
+
+  /* ─────────────────────────────────────────────────────────────────────
+   * Error / info toasts. Single dismissible toast variant — Step 7 may
+   * elaborate. Auto-dismiss after 8s; click to dismiss earlier. Falls
+   * back to console if #toast-container is missing.
+   * ──────────────────────────────────────────────────────────────────── */
+  function _showToast(message, variant) {
+    const container = document.getElementById("toast-container");
+    if (!container) {
+      (variant === "error" ? console.error : console.log)("[toast]", message);
+      return;
+    }
+    const t = document.createElement("div");
+    t.className = `toast toast-${variant}`;
+    t.textContent = message;
+    let dismissed = false;
+    const dismiss = () => {
+      if (dismissed) return;
+      dismissed = true;
+      t.classList.add("toast-fade");
+      setTimeout(() => t.remove(), 250);
+    };
+    t.addEventListener("click", dismiss);
+    setTimeout(dismiss, 8000);
+    container.appendChild(t);
+  }
+  function showError(message) { _showToast(message, "error"); }
+  function showInfo(message)  { _showToast(message, "info"); }
+
+  /* ─────────────────────────────────────────────────────────────────────
+   * "Last refreshed" indicator. Driven by the time the user clicks
+   * refresh, NOT by max(per-row last_refreshed). The user-facing
+   * question is "when did I last hit refresh", not "how fresh is the
+   * stalest container". Per-row r.last_refreshed lives on rows for
+   * future per-row UI but does not feed this indicator.
+   * ──────────────────────────────────────────────────────────────────── */
+  let LAST_REFRESH_AT = null;
+  function markRefreshed() {
+    LAST_REFRESH_AT = Date.now();
+    updateLastRefresh();
+  }
+  function updateLastRefresh() {
+    const el = document.getElementById("last-refresh");
+    if (!el) return;
+    if (!LAST_REFRESH_AT) { el.textContent = "—"; return; }
+    const diffMin = Math.max(0, Math.round((Date.now() - LAST_REFRESH_AT) / 60000));
+    el.textContent = diffMin < 1 ? "just now" : `${diffMin} min ago`;
+  }
+  // Keep the indicator roughly current if the user leaves the app idle.
+  setInterval(updateLastRefresh, 30000);
 
   /* ─────────────────────────────────────────────────────────────────────
    * Live container data. Filled by loadInitialData() on pywebviewready;
@@ -104,19 +159,70 @@
       ROWS = await Bridge.list_containers();
       render();
     } catch (e) {
-      // Step 6 will add UI for this; for now console.error is the contract.
-      console.error('[bridge] list_containers failed', e);
+      showError(`Failed to load containers: ${(e && e.message) || e}`);
     }
+    try {
+      await loadSettings();
+    } catch (e) {
+      // Settings load isn't fatal — log and continue.
+      console.warn('[bridge] get_settings failed', e);
+    }
+    updateLastRefresh();
   }
   window.addEventListener('pywebviewready', loadInitialData);
 
+  /* ─── Settings load/save ─── */
+  async function loadSettings() {
+    const s = await Bridge.get_settings();
+    const companyEl = document.getElementById("settings-company");
+    if (companyEl) companyEl.value = s.company_name || "";
+    const tokInput = document.getElementById("settings-token");
+    if (tokInput) {
+      // Always blank — token never crosses the bridge to JS. Placeholder
+      // signals "already set, leave blank to keep" vs. "not set yet".
+      tokInput.value = "";
+      tokInput.placeholder = s.api_token_present
+        ? "••••••••••••••••"
+        : "Enter your ShipsGo API key";
+    }
+  }
+
+  async function handleSaveSettings() {
+    const company = (document.getElementById("settings-company") || {value:""}).value;
+    const tokInput = document.getElementById("settings-token") || {value:""};
+    const tokVal = tokInput.value;
+    // Pass null when the user didn't type anything — bridge then leaves
+    // keyring untouched (deliberate departure from the legacy GUI, which
+    // disabled Save on blank token).
+    const tokenArg = tokVal && tokVal.trim() ? tokVal : null;
+    let result;
+    try {
+      result = await Bridge.save_settings(company, tokenArg);
+    } catch (e) {
+      showError(`Save failed: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!result.ok) {
+      showError(`Save failed: ${result.error || "unknown"}`);
+      return;
+    }
+    await loadSettings();
+    showInfo("Settings saved.");
+  }
+  const saveBtn = document.getElementById("btn-settings-save");
+  if (saveBtn) saveBtn.addEventListener("click", handleSaveSettings);
+
   /* ─── Drawer ─── */
   const app = document.getElementById("app");
+  // Track which cn the drawer / remove-modal is currently acting on so
+  // the remove-confirm handler doesn't have to re-derive it from DOM.
+  let DRAWER_CN = null;
   TBODY.addEventListener("click", (e) => {
     const tr = e.target.closest("tr");
     if (!tr) return;
     const row = ROWS.find(r => r.cn === tr.dataset.cn);
     if (!row) return;
+    DRAWER_CN = row.cn;
     const cls = statusClass(row);
     document.getElementById("drawer-title").textContent = row.cn;
     document.getElementById("drawer-sub").textContent = `${row.carrier} · ${row.vessel || "No vessel yet"}`;
@@ -145,7 +251,16 @@
 
   /* ─── Modals ─── */
   // Modal open-state lives on #app, not on #modal-add. Toggle the parent class.
-  document.getElementById("btn-open-add").addEventListener("click", () => app.classList.add("modal-add-open"));
+  function resetAddModal() {
+    document.getElementById("f-cn").value = "";
+    document.getElementById("f-carrier").selectedIndex = 0;
+    const errEl = document.getElementById("add-error");
+    if (errEl) { errEl.hidden = true; errEl.textContent = ""; }
+  }
+  document.getElementById("btn-open-add").addEventListener("click", () => {
+    resetAddModal();
+    app.classList.add("modal-add-open");
+  });
   document.querySelectorAll("[data-close-modal]").forEach(b =>
     b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-remove-open"))
   );
@@ -154,6 +269,72 @@
       if (e.target.id === id) app.classList.remove("modal-add-open", "modal-remove-open");
     });
   });
+
+  /* ─── Add submit ─── */
+  async function handleAddSubmit() {
+    const cn = document.getElementById("f-cn").value.trim();
+    const carrier = document.getElementById("f-carrier").value.trim();
+    const errEl = document.getElementById("add-error");
+    errEl.hidden = true;
+    errEl.textContent = "";
+
+    let result;
+    try {
+      result = await Bridge.add_container(cn, carrier);
+    } catch (e) {
+      errEl.textContent = `Add failed: ${(e && e.message) || e}`;
+      errEl.hidden = false;
+      return;
+    }
+
+    if (!result.ok) {
+      if (result.error === "NOT_ENOUGH_CREDITS") {
+        // Out-of-credits is global — close modal, show toast.
+        app.classList.remove("modal-add-open");
+        showError("ShipsGo: not enough credits to add this container.");
+      } else if (result.error === "already_exists_local") {
+        errEl.textContent = "Container is already tracked.";
+        errEl.hidden = false;
+      } else {
+        errEl.textContent = result.error || "Failed to add container.";
+        errEl.hidden = false;
+      }
+      return;
+    }
+    ROWS.push(result.container);
+    render();
+    app.classList.remove("modal-add-open");
+    resetAddModal();
+    if (result.was_existing) {
+      showInfo("Already on ShipsGo — added to your dashboard.");
+    }
+  }
+  document.getElementById("btn-add-submit").addEventListener("click", handleAddSubmit);
+
+  /* ─── Remove confirm ─── */
+  async function handleRemoveConfirm() {
+    if (!DRAWER_CN) {
+      app.classList.remove("modal-remove-open");
+      return;
+    }
+    const cn = DRAWER_CN;
+    let result;
+    try {
+      result = await Bridge.remove_container(cn);
+    } catch (e) {
+      showError(`Remove failed: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!result.ok) {
+      showError(`Remove failed: ${result.error || "unknown"}`);
+      return;
+    }
+    ROWS = ROWS.filter(r => r.cn !== cn);
+    DRAWER_CN = null;
+    render();
+    app.classList.remove("modal-remove-open", "drawer-open");
+  }
+  document.getElementById("btn-remove-confirm").addEventListener("click", handleRemoveConfirm);
 
   /* ─── View routing — brand + gear button + Cancel/back all use [data-view] ─── */
   function showView(name) {
@@ -216,15 +397,36 @@
     document.getElementById("activity-toggle").setAttribute("aria-expanded", wasCollapsed ? "true" : "false");
   });
 
-  /* ─── Refresh: spin + update timestamp ─── */
-  document.getElementById("btn-refresh").addEventListener("click", () => {
+  /* ─── Refresh: live ShipsGo call via bridge ─── */
+  async function handleRefresh() {
     const btn = document.getElementById("btn-refresh");
     const svg = btn.querySelector("svg");
-    svg.style.transition = "transform .8s ease";
+    btn.disabled = true;
+    btn.classList.add("is-loading");
+    svg.style.transition = "transform .8s linear";
     svg.style.transform = "rotate(540deg)";
-    setTimeout(() => { svg.style.transform = "rotate(0)"; }, 850);
-    document.getElementById("last-refresh").textContent = "just now";
-  });
+    try {
+      const result = await Bridge.refresh_all();
+      if (result.error) {
+        showError(`Refresh failed: ${result.error}`);
+      } else {
+        ROWS = await Bridge.list_containers();
+        render();
+        markRefreshed();
+        if (result.failed && result.failed.length > 0) {
+          showError(`Refreshed ${result.updated} containers; ${result.failed.length} failed. See console.`);
+          console.warn("[refresh] failed:", result.failed);
+        }
+      }
+    } catch (e) {
+      showError(`Refresh failed: ${(e && e.message) || e}`);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("is-loading");
+      setTimeout(() => { svg.style.transform = "rotate(0)"; }, 50);
+    }
+  }
+  document.getElementById("btn-refresh").addEventListener("click", handleRefresh);
 
   /* ─── Keyboard shortcuts ─── */
   document.addEventListener("keydown", (e) => {
