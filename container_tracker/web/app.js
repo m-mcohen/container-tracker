@@ -135,8 +135,8 @@
    * Live container data. Filled by loadInitialData() on pywebviewready;
    * empty until then. Reassignable (let, not const) because each refresh
    * replaces the whole array reference rather than mutating it — the
-   * drawer/render code reads ROWS by closure, so reassignment
-   * propagates without subscriber wiring.
+   * render code reads ROWS by closure, so reassignment propagates
+   * without subscriber wiring.
    * ──────────────────────────────────────────────────────────────────── */
   let ROWS = [];
 
@@ -174,7 +174,7 @@
 
   let activeFilter = "all";
 
-  // Setting helper used by renderStats + drawer.
+  // Setting helper used by renderStats.
   function setText(id, text) {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -334,43 +334,7 @@
   const saveBtn = document.getElementById("btn-settings-save");
   if (saveBtn) saveBtn.addEventListener("click", handleSaveSettings);
 
-  /* ─── Drawer ─── */
   const app = document.getElementById("app");
-  // Track which cn the drawer / remove-modal is currently acting on so
-  // the remove-confirm handler doesn't have to re-derive it from DOM.
-  let DRAWER_CN = null;
-  TBODY.addEventListener("click", (e) => {
-    const tr = e.target.closest("tr");
-    if (!tr) return;
-    const row = ROWS.find(r => r.cn === tr.dataset.cn);
-    if (!row) return;
-    DRAWER_CN = row.cn;
-    const cls = statusClass(row);
-    document.getElementById("drawer-title").textContent = row.cn;
-    document.getElementById("drawer-sub").textContent = `${row.carrier} · ${row.vessel || "No vessel yet"}`;
-    const status = document.getElementById("drawer-status");
-    status.className = `chip-status ${cls}`;
-    status.innerHTML = `<span class="dot"></span>${statusLabel(row)}`;
-    const delay = document.getElementById("drawer-delay");
-    if (row.delayVal > 0) { delay.style.color = "var(--status-delayed)"; delay.textContent = `${row.delay} late`; }
-    else if (row.delayVal < 0) { delay.style.color = "var(--status-arrived)"; delay.textContent = `${row.delay} early`; }
-    else if (row.delayVal === 0) { delay.style.color = "var(--text-secondary)"; delay.textContent = "On time"; }
-    else { delay.style.color = "var(--text-hint)"; delay.textContent = "Not yet sailed"; }
-    const fill = document.getElementById("drawer-fill");
-    const pct  = document.getElementById("drawer-pct");
-    if (row.pct === null) { fill.style.width = "0%"; pct.textContent = "—"; }
-    else { fill.style.width = row.pct + "%"; fill.className = `transit-fill ${cls}`; pct.textContent = row.pct + "%"; }
-    document.getElementById("drawer-cn").textContent = row.cn;
-    setText("drawer-last-refresh", formatRelativeMs(parseIsoMs(row.last_refreshed)));
-    app.classList.add("drawer-open");
-  });
-  document.getElementById("drawer-close").addEventListener("click", () => app.classList.remove("drawer-open"));
-  document.getElementById("drawer-backdrop").addEventListener("click", () => app.classList.remove("drawer-open"));
-  document.getElementById("drawer-remove").addEventListener("click", () => {
-    document.getElementById("remove-cn").textContent = document.getElementById("drawer-cn").textContent;
-    app.classList.remove("drawer-open");
-    app.classList.add("modal-remove-open");
-  });
 
   /* ─── Modals ─── */
   // Modal open-state lives on #app, not on #modal-add. Toggle the parent class.
@@ -385,11 +349,11 @@
     app.classList.add("modal-add-open");
   });
   document.querySelectorAll("[data-close-modal]").forEach(b =>
-    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-remove-open", "modal-register-open"))
+    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-register-open"))
   );
-  ["modal-add", "modal-remove"].forEach(id => {
+  ["modal-add"].forEach(id => {
     document.getElementById(id).addEventListener("click", (e) => {
-      if (e.target.id === id) app.classList.remove("modal-add-open", "modal-remove-open");
+      if (e.target.id === id) app.classList.remove("modal-add-open");
     });
   });
 
@@ -433,31 +397,6 @@
     }
   }
   document.getElementById("btn-add-submit").addEventListener("click", handleAddSubmit);
-
-  /* ─── Remove confirm ─── */
-  async function handleRemoveConfirm() {
-    if (!DRAWER_CN) {
-      app.classList.remove("modal-remove-open");
-      return;
-    }
-    const cn = DRAWER_CN;
-    let result;
-    try {
-      result = await Bridge.remove_container(cn);
-    } catch (e) {
-      showError(`Remove failed: ${(e && e.message) || e}`);
-      return;
-    }
-    if (!result.ok) {
-      showError(`Remove failed: ${result.error || "unknown"}`);
-      return;
-    }
-    ROWS = ROWS.filter(r => r.cn !== cn);
-    DRAWER_CN = null;
-    render();
-    app.classList.remove("modal-remove-open", "drawer-open");
-  }
-  document.getElementById("btn-remove-confirm").addEventListener("click", handleRemoveConfirm);
 
   /* ─── View routing — brand + gear button + Cancel/back all use [data-view] ─── */
   function showView(name) {
@@ -576,7 +515,7 @@
   /* ─── Keyboard shortcuts ─── */
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      app.classList.remove("drawer-open", "modal-add-open", "modal-remove-open", "modal-register-open");
+      app.classList.remove("modal-add-open", "modal-register-open");
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
