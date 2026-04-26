@@ -2,11 +2,12 @@
 name = "container-tracker"
 version = "1.0.0"
 description = "Track ocean shipping containers via ShipsGo API and sync to Excel."
-# Python 3.12 is the supported development and build target. Pinned because
-# pywebview's Windows backend depends on pythonnet, which (as of this writing)
-# has no stable wheel for Python 3.13+. Re-evaluate the upper bound once
-# pythonnet ships wheels for newer Python versions.
-requires-python = ">=3.12,<3.13"
+# 3.12 is the actual build target (see build.bat). 3.13 is allowed once we
+# choose to use it — pythonnet typically ships wheels for new Python minors
+# within a few months. The hard upper bound stays at 3.14: that's the version
+# that broke the iteration-1 install (no pythonnet wheel, NuGet build failure).
+# Re-evaluate the upper bound when pythonnet 3.x ships wheels for 3.14+.
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "requests",
     "openpyxl",
