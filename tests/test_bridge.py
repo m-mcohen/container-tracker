@@ -287,6 +287,7 @@ def test_refresh_all_no_token_returns_error_dict(isolated_data_dir, mock_keyring
         "updated": 0, "failed": [],
         "duration_ms": 0, "error": "API token not configured",
         "excel_read_failed": False, "excel_write_failed": False,
+        "excel_missing": False,
         "unmatched": [], "excel_rows_updated": 0,
     }
 
@@ -614,6 +615,46 @@ def test_refresh_all_reads_cns_from_excel_and_adds_to_db(
     # The stub also got persisted to tracking_data.json.
     persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
     assert "EVRG7777777" in persisted
+
+
+def test_refresh_all_excel_path_missing_file(
+        isolated_data_dir, monkeypatch, patched_token, sample_tracking_db,
+        save_spy, tmp_path):
+    """Linked workbook path that no longer exists → excel_missing=True,
+    Excel read+write skipped, but the API fetch still runs and
+    tracking_data.json is still written. Distinct from
+    excel_read_failed (which is for raised exceptions during read)."""
+    sample_tracking_db()
+    save_spy["tracking_writes"] = 0
+    payload = _fixture_payload()
+    inner = payload["shipment"]
+    # Path is configured but the file does NOT exist.
+    ghost = tmp_path / "deleted_workbook.xlsx"
+    assert not ghost.exists()
+    _link_workbook(ghost)
+
+    # Hard sentinel: Excel helpers must NOT be called when the file is
+    # missing — both read and write should be short-circuited.
+    def boom(*a, **k):  # pragma: no cover - only fires if test fails
+        raise AssertionError("excel helper should not be called when file missing")
+    monkeypatch.setattr(ct_bridge, "read_containers_from_excel", boom)
+    monkeypatch.setattr(ct_bridge, "update_excel_with_tracking", boom)
+
+    factory = _FakeShipsGoClient.factory(
+        listing=[{"id": inner["id"], "container_number": inner["container_number"]}],
+        get_results={inner["id"]: payload},
+    )
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().refresh_all()
+
+    assert result["excel_missing"] is True
+    assert result["excel_read_failed"] is False
+    assert result["excel_write_failed"] is False
+    assert result["error"] is None
+    # API fetch still ran and the JSON DB was still saved.
+    assert factory.captured["instance"].list_calls == 1
+    assert save_spy["tracking_writes"] == 1
 
 
 def test_refresh_all_excel_locked_on_read(

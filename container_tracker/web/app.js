@@ -84,6 +84,14 @@
     const b = document.getElementById("notice-excel-write-failed");
     if (b) b.hidden = true;
   }
+  function showExcelMissingBanner() {
+    const b = document.getElementById("notice-excel-missing");
+    if (b) b.hidden = false;
+  }
+  function hideExcelMissingBanner() {
+    const b = document.getElementById("notice-excel-missing");
+    if (b) b.hidden = true;
+  }
 
   /* Carrier dropdown options come from the bridge once at boot, then
    * cached. Keeps the register-unmatched modal in sync with CARRIER_NAMES
@@ -532,6 +540,11 @@
         // so the user knows the next refresh needs Excel closed.
         if (result.excel_read_failed) {
           showError("Couldn't read Excel — close it and click Refresh to sync the container list.");
+        }
+        if (result.excel_missing) {
+          showExcelMissingBanner();
+        } else {
+          hideExcelMissingBanner();
         }
         if (result.excel_write_failed) {
           showExcelWriteFailedBanner();

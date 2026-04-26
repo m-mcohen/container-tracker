@@ -70,6 +70,17 @@
               <button class="btn btn-sm btn-primary" id="notice-register">Register all</button>
             </div>
           </div>
+          <!-- Excel-missing banner — hidden until refresh_all returns excel_missing=true (config has a path but the file's gone). Persists until the user re-links via Settings and the next refresh clears it. -->
+          <div class="notice notice-warning" id="notice-excel-missing" hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="notice-body">
+              <strong class="notice-title">Linked Excel file not found</strong>
+              <span class="notice-detail">Re-link it in Settings. Tracking data is still being updated.</span>
+            </div>
+            <div class="notice-actions">
+              <button class="btn btn-sm btn-primary" data-view="settings">Open Settings</button>
+            </div>
+          </div>
           <!-- Excel-write-failed banner — hidden until refresh_all returns excel_write_failed=true. Persists until the next successful refresh clears it. -->
           <div class="notice notice-warning" id="notice-excel-write-failed" hidden>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>

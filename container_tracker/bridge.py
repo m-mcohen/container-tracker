@@ -219,9 +219,16 @@ class Bridge:
             "error": None,
             "excel_read_failed": False,
             "excel_write_failed": False,
+            "excel_missing": False,
             "unmatched": [],
             "excel_rows_updated": 0,
         }
+        # Treat "linked path that no longer exists" as an explicit error
+        # state, distinct from "no file linked at all" (which is silent).
+        # Surfacing this lets JS render a persistent banner so the user
+        # can re-link via Settings — silent skip would leave them
+        # wondering why the workbook isn't updating.
+        excel_missing = bool(excel_path) and not Path(excel_path).exists()
 
         token = ct_credentials.get_api_token()
         if not token:
@@ -231,8 +238,10 @@ class Bridge:
         db = ct_config.load_tracking_db()
 
         # Phase 0: read CNs from Excel and merge as stubs (legacy line 781-793).
+        # Skip both read AND write if the linked file is missing — the
+        # API fetch still runs so JSON state stays current.
         excel_read_failed = False
-        if excel_path and Path(excel_path).exists():
+        if excel_path and not excel_missing:
             try:
                 for raw in read_containers_from_excel(excel_path):
                     cn_up = (raw or "").strip().upper()
@@ -252,7 +261,8 @@ class Bridge:
             # Nothing to refresh and no API call needed.
             return {**base,
                     "duration_ms": int((time.monotonic() - started) * 1000),
-                    "excel_read_failed": excel_read_failed}
+                    "excel_read_failed": excel_read_failed,
+                    "excel_missing": excel_missing}
 
         client = ShipsGoClient(token)
 
@@ -265,6 +275,7 @@ class Bridge:
                 "duration_ms": int((time.monotonic() - started) * 1000),
                 "error": f"list_shipments failed: {e}",
                 "excel_read_failed": excel_read_failed,
+                "excel_missing": excel_missing,
             }
 
         by_cn: dict[str, dict] = {}
@@ -308,7 +319,7 @@ class Bridge:
         # Phase 3: write back to Excel (legacy line 821-829).
         excel_write_failed = False
         excel_rows_updated = 0
-        if excel_path and Path(excel_path).exists():
+        if excel_path and not excel_missing:
             try:
                 excel_rows_updated = (
                     update_excel_with_tracking(excel_path, db) or 0)
@@ -323,6 +334,7 @@ class Bridge:
             "error": None,
             "excel_read_failed": excel_read_failed,
             "excel_write_failed": excel_write_failed,
+            "excel_missing": excel_missing,
             "unmatched": unmatched,
             "excel_rows_updated": excel_rows_updated,
         }
