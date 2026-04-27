@@ -322,6 +322,17 @@
     }
     const excelEl = document.getElementById("excel-current-path");
     if (excelEl) excelEl.textContent = s.excel_path || "No file linked";
+    // Toolbar Open-in-Excel button mirrors the linked-file state. Same
+    // bridge call as the Settings card's "Open in Excel"; disabled when
+    // nothing's linked.
+    const toolbarOpenBtn = document.getElementById("btn-open-excel-toolbar");
+    if (toolbarOpenBtn) {
+      const linked = !!(s.excel_path && s.excel_path.length > 0);
+      toolbarOpenBtn.disabled = !linked;
+      toolbarOpenBtn.title = linked
+        ? `Open ${s.excel_path}`
+        : "Link an Excel file in Settings to enable";
+    }
   }
 
   async function handleSaveSettings() {
@@ -749,6 +760,8 @@
   if (excelCreateBtn) excelCreateBtn.addEventListener("click", handleExcelCreate);
   const excelOpenBtn = document.getElementById("btn-excel-open");
   if (excelOpenBtn) excelOpenBtn.addEventListener("click", handleExcelOpen);
+  const toolbarOpenExcelBtn = document.getElementById("btn-open-excel-toolbar");
+  if (toolbarOpenExcelBtn) toolbarOpenExcelBtn.addEventListener("click", handleExcelOpen);
 
   /* ─── Row action menu + archive flow ─── */
   // Position the menu next to the trigger button using viewport coords
