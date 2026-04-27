@@ -595,17 +595,6 @@
     border-bottom: 1px solid var(--border-subtle);
     white-space: nowrap;
   }
-  table.shipments thead th.sortable { cursor: pointer; }
-  table.shipments thead th.sortable::after {
-    content: " ↕";
-    color: var(--border-strong);
-    font-size: 10px;
-    margin-left: 2px;
-  }
-  table.shipments thead th.sorted::after {
-    content: " ↑";
-    color: var(--accent);
-  }
   table.shipments tbody td {
     padding: 11px 14px;
     border-bottom: 1px solid var(--border-subtle);
