@@ -175,6 +175,11 @@
 
   let activeFilter = "all";
 
+  // Set of CNs currently checked in the table. Persists across renders
+  // so filtering / refresh doesn't blow away the user's selection. The
+  // bulk-archive flow reads this and the change handlers below mutate it.
+  const SELECTED = new Set();
+
   // Setting helper used by renderStats.
   function setText(id, text) {
     const el = document.getElementById(id);
@@ -259,9 +264,11 @@
               <button class="row-action" data-action="refresh" data-cn="${r.cn}" aria-label="Refresh ${r.cn}" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
               <button class="row-action" data-action="more" data-cn="${r.cn}" aria-label="More actions for ${r.cn}" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
             </div>`;
+      const checkAttr = SELECTED.has(r.cn) ? " checked" : "";
+      const disabledAttr = isArchived ? " disabled" : "";
       return `
         <tr data-cn="${r.cn}"${isArchived ? ' class="is-archived"' : ''}>
-          <td><input type="checkbox" aria-label="Select ${r.cn}" onclick="event.stopPropagation()" /></td>
+          <td><input type="checkbox" class="row-select" data-cn="${r.cn}" aria-label="Select ${r.cn}" onclick="event.stopPropagation()"${checkAttr}${disabledAttr} /></td>
           <td><span class="cn">${r.cn}</span></td>
           <td><span class="carrier"><span class="carrier-badge c-${r.scac}">${r.scac}</span>${r.carrier}</span></td>
           <td>${statusBadge}</td>
@@ -276,6 +283,15 @@
     }).join("");
 
     document.getElementById("row-count").textContent = filtered.length;
+
+    // Drop SELECTED entries that are no longer renderable (archived,
+    // refreshed-away, or filtered out — any case where the user can no
+    // longer toggle the checkbox). Keeps the bulk-bar count honest.
+    const liveCns = new Set(ROWS.filter(r => !r.archived).map(r => r.cn));
+    for (const cn of [...SELECTED]) {
+      if (!liveCns.has(cn)) SELECTED.delete(cn);
+    }
+    updateBulkBar();
   }
   // Initial render with empty ROWS — pywebviewready will trigger a real load.
   render();
@@ -375,13 +391,13 @@
     app.classList.add("modal-add-open");
   });
   document.querySelectorAll("[data-close-modal]").forEach(b =>
-    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-register-open", "modal-archive-open"))
+    b.addEventListener("click", () => app.classList.remove("modal-add-open", "modal-register-open", "modal-archive-open", "modal-bulk-archive-open"))
   );
-  ["modal-add", "modal-archive"].forEach(id => {
+  ["modal-add", "modal-archive", "modal-bulk-archive"].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("click", (e) => {
-      if (e.target.id === id) app.classList.remove("modal-add-open", "modal-archive-open");
+      if (e.target.id === id) app.classList.remove("modal-add-open", "modal-archive-open", "modal-bulk-archive-open");
     });
   });
 
@@ -546,7 +562,7 @@
   /* ─── Keyboard shortcuts ─── */
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      app.classList.remove("modal-add-open", "modal-register-open", "modal-archive-open");
+      app.classList.remove("modal-add-open", "modal-register-open", "modal-archive-open", "modal-bulk-archive-open");
       closeRowMenu();
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -850,4 +866,116 @@
   }
   const archiveConfirmBtn = document.getElementById("btn-archive-confirm");
   if (archiveConfirmBtn) archiveConfirmBtn.addEventListener("click", handleArchiveConfirm);
+
+  /* ─── Bulk selection + bulk archive ─── */
+  function updateBulkBar() {
+    const bar = document.getElementById("bulk-bar");
+    const countEl = document.getElementById("bulk-count");
+    if (!bar) return;
+    const n = SELECTED.size;
+    bar.hidden = n === 0;
+    if (countEl) countEl.textContent = `${n} container${n === 1 ? "" : "s"} selected`;
+    // Header checkbox tri-state — checked when every visible non-archived
+    // row is selected, indeterminate when some are.
+    const headerCb = document.querySelector("table.shipments thead input[type=checkbox]");
+    if (headerCb) {
+      const selectableRows = document.querySelectorAll(
+        "#shipments-tbody input.row-select:not([disabled])");
+      const total = selectableRows.length;
+      const checked = Array.from(selectableRows).filter(cb => cb.checked).length;
+      headerCb.checked = total > 0 && checked === total;
+      headerCb.indeterminate = checked > 0 && checked < total;
+    }
+  }
+
+  TBODY.addEventListener("change", (e) => {
+    const cb = e.target.closest("input.row-select[data-cn]");
+    if (!cb) return;
+    const cn = cb.dataset.cn || "";
+    if (!cn) return;
+    if (cb.checked) SELECTED.add(cn);
+    else SELECTED.delete(cn);
+    updateBulkBar();
+  });
+
+  const headerCheckbox = document.querySelector("table.shipments thead input[type=checkbox]");
+  if (headerCheckbox) {
+    headerCheckbox.addEventListener("change", (e) => {
+      const target = e.target.checked;
+      // Operate only on currently-rendered, non-archived rows.
+      document.querySelectorAll(
+        "#shipments-tbody input.row-select[data-cn]:not([disabled])"
+      ).forEach(cb => {
+        cb.checked = target;
+        const cn = cb.dataset.cn || "";
+        if (!cn) return;
+        if (target) SELECTED.add(cn);
+        else SELECTED.delete(cn);
+      });
+      updateBulkBar();
+    });
+  }
+
+  const bulkClearLink = document.getElementById("bulk-clear");
+  if (bulkClearLink) {
+    bulkClearLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      SELECTED.clear();
+      document.querySelectorAll(
+        "#shipments-tbody input.row-select"
+      ).forEach(cb => { cb.checked = false; });
+      updateBulkBar();
+    });
+  }
+
+  const bulkArchiveBtn = document.getElementById("bulk-archive");
+  if (bulkArchiveBtn) {
+    bulkArchiveBtn.addEventListener("click", () => {
+      if (SELECTED.size === 0) return;
+      const countEl = document.getElementById("bulk-archive-count");
+      if (countEl) countEl.textContent = String(SELECTED.size);
+      app.classList.add("modal-bulk-archive-open");
+    });
+  }
+
+  async function handleBulkArchiveConfirm() {
+    app.classList.remove("modal-bulk-archive-open");
+    const cns = Array.from(SELECTED);
+    if (cns.length === 0) return;
+    let archived = 0;
+    let excelFailed = false;
+    let firstError = null;
+    for (const cn of cns) {
+      let result;
+      try {
+        result = await Bridge.archive_container(cn);
+      } catch (e) {
+        if (!firstError) firstError = (e && e.message) || String(e);
+        continue;
+      }
+      if (!result || !result.ok) {
+        if (!firstError && result && result.error) firstError = result.error;
+        continue;
+      }
+      archived++;
+      const idx = ROWS.findIndex(r => r.cn === cn);
+      if (idx >= 0) ROWS[idx] = Object.assign({}, ROWS[idx], { archived: true });
+      if (result.excel_write_failed) excelFailed = true;
+    }
+    SELECTED.clear();
+    render();
+    if (excelFailed) showExcelWriteFailedBanner();
+    if (firstError && archived === 0) {
+      showError(`Archive failed: ${firstError}`);
+    } else {
+      if (firstError) {
+        console.warn("[bulk-archive] some failures:", firstError);
+      }
+      showInfo(`${archived} container${archived === 1 ? "" : "s"} archived.`);
+    }
+  }
+  const bulkArchiveConfirmBtn = document.getElementById("btn-bulk-archive-confirm");
+  if (bulkArchiveConfirmBtn) {
+    bulkArchiveConfirmBtn.addEventListener("click", handleBulkArchiveConfirm);
+  }
 

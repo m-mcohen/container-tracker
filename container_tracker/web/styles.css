@@ -399,6 +399,32 @@
   .notice-body strong { font-weight: 700; }
   .notice-actions { display: flex; gap: 6px; flex: none; }
 
+  /* Bulk action bar — appears between the topbar and the KPI cards
+   * when one or more row checkboxes are selected. */
+  .bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+  .bulk-count { font-weight: 600; color: var(--text-primary); }
+  .bulk-clear {
+    color: var(--accent, #2563eb);
+    text-decoration: none;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .bulk-clear:hover { text-decoration: underline; }
+
   /* Stats */
   .stats {
     display: grid;
@@ -865,6 +891,7 @@
   .app.modal-add-open #modal-add { display: flex; }
   .app.modal-register-open #modal-register-unmatched { display: flex; }
   .app.modal-archive-open #modal-archive { display: flex; }
+  .app.modal-bulk-archive-open #modal-bulk-archive { display: flex; }
   /* Register-unmatched modal is wider — fits CN + carrier dropdown rows. */
   #modal-register-unmatched .modal { width: 520px; }
   .register-list {

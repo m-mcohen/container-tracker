@@ -114,6 +114,14 @@
           </div>
         </div>
 
+        <!-- Bulk action bar — visible when one or more row checkboxes are selected. -->
+        <div class="bulk-bar" id="bulk-bar" hidden>
+          <span class="bulk-count" id="bulk-count">0 containers selected</span>
+          <div class="spacer"></div>
+          <a href="#" class="bulk-clear" id="bulk-clear">Clear selection</a>
+          <button type="button" class="btn btn-primary btn-sm" id="bulk-archive">Archive selected</button>
+        </div>
+
         <!-- Stats -->
         <div class="stats">
           <div class="stat">
@@ -360,6 +368,24 @@
   <!-- ─── Row action menu (positioned via JS next to the … button) ─── -->
   <div class="row-menu" id="row-menu" hidden role="menu">
     <button type="button" class="row-menu-item" data-action="archive" role="menuitem">Archive</button>
+  </div>
+
+  <!-- ─── Modal: Confirm bulk archive ─── -->
+  <div class="modal-backdrop" id="modal-bulk-archive">
+    <div class="modal" role="dialog" aria-labelledby="modal-bulk-archive-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-bulk-archive-title">Archive containers?</div>
+      </div>
+      <div class="modal-body">
+        <div class="callout">
+          <strong id="bulk-archive-count">0</strong> containers will be removed from your Excel file. You can find archived containers in the Archived view.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary" id="btn-bulk-archive-confirm">Archive</button>
+      </div>
+    </div>
   </div>
 
   <!-- ─── Modal: Confirm archive ─── -->
