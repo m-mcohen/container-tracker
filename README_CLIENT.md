@@ -6,7 +6,7 @@ Tracks your shipping containers across MSC, Maersk, CMA CGM, Hapag-Lloyd, and ot
 
 ## First-Time Setup
 
-1. Run the Setup file (`ContainerTracker_Setup_v1.0.0.exe`) and follow the prompts.
+1. Run the Setup file (`ContainerTracker_Setup_v1.1.0.exe`) and follow the prompts.
 2. Launch Container Tracker from your desktop or Start menu.
 3. A Welcome dialog will ask for three things:
    - **Company name** — whatever you'd like the app to display.
