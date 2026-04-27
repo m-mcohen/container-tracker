@@ -154,15 +154,18 @@ def update_excel_with_tracking(path, data):
     return count
 
 
-def append_container_row(path, cn, carrier="", status="NEW"):
+def append_container_row(path, cn, carrier="", status="NEW", record=None):
     """Append a single new CN to the linked workbook. Idempotent — if cn
     is already in the container column, returns False without writing.
 
-    Used by add_container so a freshly-tracked CN appears in the user's
-    spreadsheet immediately, before the next refresh. Only the carrier
-    and status columns are populated; tracked fields the bridge doesn't
-    have yet (eta, route, etc.) stay blank and get filled on first
-    refresh by update_excel_with_tracking.
+    Two modes:
+      * ``record=None`` (default): writes only the carrier and status
+        columns. Used by add_container for newly-tracked CNs that have
+        no API data yet — the rest fills in on first refresh.
+      * ``record`` is a dict: writes every TRACKING_COL_MAP field that
+        has a non-empty value on the record. Used by restore_container
+        to recreate a row that archive_container deleted, preserving
+        eta, route, vessel, etc., from before the archive.
     """
     cn_up = str(cn).strip().upper()
     if not cn_up:
@@ -180,10 +183,19 @@ def append_container_row(path, cn, carrier="", status="NEW"):
         fm = find_or_create_tracking_columns(ws)
         nr = ws.max_row + 1
         ws.cell(row=nr, column=cc, value=cn_up)
-        if carrier and "carrier" in fm:
-            ws.cell(row=nr, column=fm["carrier"], value=carrier)
-        if status and "status" in fm:
-            ws.cell(row=nr, column=fm["status"], value=status)
+        if record is not None:
+            for fk, col in fm.items():
+                val = record.get(fk, "")
+                if val == "" or val is None:
+                    continue
+                if fk == "transit_pct":
+                    val = f"{val}%"
+                ws.cell(row=nr, column=col, value=val)
+        else:
+            if carrier and "carrier" in fm:
+                ws.cell(row=nr, column=fm["carrier"], value=carrier)
+            if status and "status" in fm:
+                ws.cell(row=nr, column=fm["status"], value=status)
         wb.save(str(path))
         return True
     finally:

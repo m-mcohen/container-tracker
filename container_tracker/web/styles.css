@@ -678,16 +678,31 @@
    * recedes. */
   .shipments tr.is-archived { opacity: 0.55; }
   .shipments tr.is-archived:hover { opacity: 0.75; }
-  .row-action-stub {
+  .row-action-stub,
+  .row-action-restore {
     height: 24px;
     padding: 0 10px;
     font-size: 11px;
     border-radius: 4px;
     background: transparent;
     border: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .row-action-stub {
     color: var(--text-tertiary);
     cursor: not-allowed;
-    font-weight: 500;
+  }
+  .row-action-restore {
+    color: var(--accent, #2563eb);
+    cursor: pointer;
+  }
+  .row-action-restore:hover {
+    background: var(--surface-subtle);
+    border-color: var(--accent, #2563eb);
+  }
+  .row-action-restore:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-ring);
   }
 
   /* Row action popup menu — positioned via JS next to the … button. */

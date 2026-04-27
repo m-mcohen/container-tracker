@@ -15,6 +15,7 @@
     async add_container(cn, carrier) { return await window.pywebview.api.add_container(cn, carrier); },
     async remove_container(cn) { return await window.pywebview.api.remove_container(cn); },
     async archive_container(cn) { return await window.pywebview.api.archive_container(cn); },
+    async restore_container(cn) { return await window.pywebview.api.restore_container(cn); },
     async list_carriers()   { return await window.pywebview.api.list_carriers(); },
     async set_excel_path(p) { return await window.pywebview.api.set_excel_path(p); },
     async create_excel_template(p) { return await window.pywebview.api.create_excel_template(p); },
@@ -259,16 +260,17 @@
         ? `<span class="chip-status archived"><span class="dot"></span>Archived</span>`
         : `<span class="chip-status ${cls}"><span class="dot"></span>${statusLabel(r)}</span>`;
       const actionsCell = isArchived
-        ? `<button class="row-action-stub" type="button" disabled title="Coming soon" aria-label="Restore ${r.cn}">Restore</button>`
+        ? `<button class="row-action-restore" type="button" data-action="restore" data-cn="${r.cn}" aria-label="Restore ${r.cn}">Restore</button>`
         : `<div class="row-actions">
               <button class="row-action" data-action="refresh" data-cn="${r.cn}" aria-label="Refresh ${r.cn}" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
               <button class="row-action" data-action="more" data-cn="${r.cn}" aria-label="More actions for ${r.cn}" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
             </div>`;
       const checkAttr = SELECTED.has(r.cn) ? " checked" : "";
-      const disabledAttr = isArchived ? " disabled" : "";
+      // Archived rows are now selectable in the Archived view so they
+      // can drive bulk-restore — no per-row disabled.
       return `
         <tr data-cn="${r.cn}"${isArchived ? ' class="is-archived"' : ''}>
-          <td><input type="checkbox" class="row-select" data-cn="${r.cn}" aria-label="Select ${r.cn}" onclick="event.stopPropagation()"${checkAttr}${disabledAttr} /></td>
+          <td><input type="checkbox" class="row-select" data-cn="${r.cn}" aria-label="Select ${r.cn}" onclick="event.stopPropagation()"${checkAttr} /></td>
           <td><span class="cn">${r.cn}</span></td>
           <td><span class="carrier"><span class="carrier-badge c-${r.scac}">${r.scac}</span>${r.carrier}</span></td>
           <td>${statusBadge}</td>
@@ -284,12 +286,12 @@
 
     document.getElementById("row-count").textContent = filtered.length;
 
-    // Drop SELECTED entries that are no longer renderable (archived,
-    // refreshed-away, or filtered out — any case where the user can no
-    // longer toggle the checkbox). Keeps the bulk-bar count honest.
-    const liveCns = new Set(ROWS.filter(r => !r.archived).map(r => r.cn));
+    // Drop SELECTED entries that no longer exist in ROWS (refreshed
+    // away). Filter changes clear SELECTED separately so archived
+    // selections don't bleed into non-archived views.
+    const knownCns = new Set(ROWS.map(r => r.cn));
     for (const cn of [...SELECTED]) {
-      if (!liveCns.has(cn)) SELECTED.delete(cn);
+      if (!knownCns.has(cn)) SELECTED.delete(cn);
     }
     updateBulkBar();
   }
@@ -471,6 +473,10 @@
   document.querySelectorAll(".toolbar .chip").forEach(c => {
     c.addEventListener("click", () => {
       activeFilter = c.dataset.filter;
+      // Switching views resets the selection — bulk-archive vs.
+      // bulk-restore depends on activeFilter, so carrying selections
+      // across the boundary would be ambiguous.
+      SELECTED.clear();
       document.querySelectorAll(".toolbar .chip").forEach(x => {
         const match = x.dataset.filter === activeFilter;
         x.classList.toggle("is-active", match);
@@ -800,10 +806,39 @@
 
   TBODY.addEventListener("click", (e) => {
     const moreBtn = e.target.closest("[data-action='more']");
-    if (!moreBtn) return;
-    e.stopPropagation();
-    openRowMenu(moreBtn, moreBtn.dataset.cn || "");
+    if (moreBtn) {
+      e.stopPropagation();
+      openRowMenu(moreBtn, moreBtn.dataset.cn || "");
+      return;
+    }
+    const restoreBtn = e.target.closest("[data-action='restore']");
+    if (restoreBtn) {
+      e.stopPropagation();
+      handleSingleRestore(restoreBtn.dataset.cn || "");
+      return;
+    }
   });
+
+  async function handleSingleRestore(cn) {
+    if (!cn) return;
+    let result;
+    try {
+      result = await Bridge.restore_container(cn);
+    } catch (e) {
+      showError(`Restore failed: ${(e && e.message) || e}`);
+      return;
+    }
+    if (!result || !result.ok) {
+      showError(`Restore failed: ${(result && result.error) || "unknown"}`);
+      return;
+    }
+    const idx = ROWS.findIndex(r => r.cn === cn);
+    if (idx >= 0) ROWS[idx] = Object.assign({}, ROWS[idx], { archived: false });
+    SELECTED.delete(cn);
+    render();
+    if (result.excel_write_failed) showExcelWriteFailedBanner();
+    showInfo("Container restored.");
+  }
 
   const rowMenu = document.getElementById("row-menu");
   if (rowMenu) {
@@ -867,7 +902,7 @@
   const archiveConfirmBtn = document.getElementById("btn-archive-confirm");
   if (archiveConfirmBtn) archiveConfirmBtn.addEventListener("click", handleArchiveConfirm);
 
-  /* ─── Bulk selection + bulk archive ─── */
+  /* ─── Bulk selection + bulk archive / restore ─── */
   function updateBulkBar() {
     const bar = document.getElementById("bulk-bar");
     const countEl = document.getElementById("bulk-count");
@@ -875,8 +910,17 @@
     const n = SELECTED.size;
     bar.hidden = n === 0;
     if (countEl) countEl.textContent = `${n} container${n === 1 ? "" : "s"} selected`;
-    // Header checkbox tri-state — checked when every visible non-archived
-    // row is selected, indeterminate when some are.
+    // Toggle bulk action button: archive in any non-archived view,
+    // restore in the archived view. SELECTED.clear() on filter change
+    // means the bar is always empty when we hit a transition, so the
+    // toggle never displays the wrong button against the wrong rows.
+    const archiveBtn = document.getElementById("bulk-archive");
+    const restoreBtn = document.getElementById("bulk-restore");
+    const inArchivedView = activeFilter === "archived";
+    if (archiveBtn) archiveBtn.hidden = inArchivedView;
+    if (restoreBtn) restoreBtn.hidden = !inArchivedView;
+    // Header checkbox tri-state — checked when every visible row is
+    // selected, indeterminate when some are.
     const headerCb = document.querySelector("table.shipments thead input[type=checkbox]");
     if (headerCb) {
       const selectableRows = document.querySelectorAll(
@@ -978,4 +1022,40 @@
   if (bulkArchiveConfirmBtn) {
     bulkArchiveConfirmBtn.addEventListener("click", handleBulkArchiveConfirm);
   }
+
+  async function handleBulkRestore() {
+    const cns = Array.from(SELECTED);
+    if (cns.length === 0) return;
+    let restored = 0;
+    let excelFailed = false;
+    let firstError = null;
+    for (const cn of cns) {
+      let result;
+      try {
+        result = await Bridge.restore_container(cn);
+      } catch (e) {
+        if (!firstError) firstError = (e && e.message) || String(e);
+        continue;
+      }
+      if (!result || !result.ok) {
+        if (!firstError && result && result.error) firstError = result.error;
+        continue;
+      }
+      restored++;
+      const idx = ROWS.findIndex(r => r.cn === cn);
+      if (idx >= 0) ROWS[idx] = Object.assign({}, ROWS[idx], { archived: false });
+      if (result.excel_write_failed) excelFailed = true;
+    }
+    SELECTED.clear();
+    render();
+    if (excelFailed) showExcelWriteFailedBanner();
+    if (firstError && restored === 0) {
+      showError(`Restore failed: ${firstError}`);
+    } else {
+      if (firstError) console.warn("[bulk-restore] some failures:", firstError);
+      showInfo(`${restored} container${restored === 1 ? "" : "s"} restored.`);
+    }
+  }
+  const bulkRestoreBtn = document.getElementById("bulk-restore");
+  if (bulkRestoreBtn) bulkRestoreBtn.addEventListener("click", handleBulkRestore);
 

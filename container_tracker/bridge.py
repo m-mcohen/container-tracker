@@ -566,6 +566,44 @@ class Bridge:
                 "container": _to_row(cn_up, rec),
                 "excel_write_failed": excel_write_failed}
 
+    def restore_container(self, cn: str) -> dict:
+        """Inverse of archive_container: clear the archived flag and
+        re-append the row to the linked workbook with whatever tracking
+        data was preserved on the record. The Excel append uses the
+        record-mode of append_container_row so eta / route / vessel /
+        etc. come back too — not just CN + carrier.
+
+        Returns ``{"ok": bool, "error": str | None, "container": dict |
+        None, "excel_write_failed": bool}``. Excel-locked path mirrors
+        archive_container — the archived flag is still cleared so the
+        UI flips back immediately; the next refresh's diff will retry
+        the Excel append (the CN is now back in the DB and not
+        archived, and update_excel_with_tracking appends DB-only CNs).
+        """
+        cn_up = (cn or "").strip().upper()
+        db = ct_config.load_tracking_db()
+        rec = db.get(cn_up)
+        if rec is None:
+            return {"ok": False, "error": "not in tracking database",
+                    "container": None, "excel_write_failed": False}
+
+        rec["archived"] = False
+        ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
+
+        excel_write_failed = False
+        cfg = ct_config.load_config()
+        excel_path = (cfg.get("excel_path") or "").strip()
+        if excel_path and Path(excel_path).exists():
+            try:
+                append_container_row(excel_path, cn_up, record=rec)
+            except Exception as e:
+                logger.warning("restore_container: excel append failed: %s", e)
+                excel_write_failed = True
+
+        return {"ok": True, "error": None,
+                "container": _to_row(cn_up, rec),
+                "excel_write_failed": excel_write_failed}
+
     # --- Settings ----------------------------------------------------------
 
     def get_settings(self) -> dict:

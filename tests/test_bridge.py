@@ -1221,3 +1221,97 @@ def test_archive_container_missing_cn(isolated_data_dir):
     assert result["ok"] is False
     assert "not in tracking" in (result["error"] or "").lower()
     assert result["container"] is None
+
+
+# --- restore_container ----------------------------------------------------
+
+def test_restore_container_clears_archived_flag(isolated_data_dir):
+    ct_config.TRACKING_DB_FILE.write_text(json.dumps({
+        "ARCH1111111": {"container_number": "ARCH1111111",
+                        "archived": True, "status": "SAILING"},
+    }))
+
+    result = Bridge().restore_container("ARCH1111111")
+
+    assert result["ok"] is True
+    assert result["error"] is None
+    assert result["container"]["archived"] is False
+    persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert persisted["ARCH1111111"]["archived"] is False
+
+
+def test_restore_container_re_appends_excel_row_with_data(
+        isolated_data_dir, sample_workbook):
+    """The restored row must come back with the preserved tracking data
+    (carrier, status, eta, etc.), not as a blank stub."""
+    wb_path = sample_workbook(rows=("KEEP1111111",))
+    _link_workbook(wb_path)
+    ct_config.TRACKING_DB_FILE.write_text(json.dumps({
+        "KEEP1111111": {"container_number": "KEEP1111111"},
+        "ARCH2222222": {
+            "container_number": "ARCH2222222",
+            "archived": True,
+            "carrier": "EVERGREEN",
+            "scac": "EGLV",
+            "status": "SAILING",
+            "eta": "2026-05-05",
+            "vessel": "MV TEST",
+            "pol": "Shanghai",
+            "pod": "Los Angeles",
+        },
+    }))
+
+    result = Bridge().restore_container("ARCH2222222")
+    assert result["ok"] is True
+    assert result["excel_write_failed"] is False
+
+    from openpyxl import load_workbook
+    from container_tracker.core.excel import (
+        find_container_column,
+        find_or_create_tracking_columns,
+    )
+    wb = load_workbook(str(wb_path))
+    ws = wb.active
+    cc = find_container_column(ws)
+    fm = find_or_create_tracking_columns(ws)
+    target_row = None
+    for r in range(2, ws.max_row + 1):
+        v = ws.cell(row=r, column=cc).value
+        if v and str(v).strip().upper() == "ARCH2222222":
+            target_row = r
+            break
+    assert target_row is not None, "restored CN should be back in the workbook"
+    assert ws.cell(row=target_row, column=fm["carrier"]).value == "EVERGREEN"
+    assert ws.cell(row=target_row, column=fm["status"]).value == "SAILING"
+    assert ws.cell(row=target_row, column=fm["eta"]).value == "2026-05-05"
+    assert ws.cell(row=target_row, column=fm["vessel"]).value == "MV TEST"
+    wb.close()
+
+
+def test_restore_container_locked_excel_returns_flag(
+        isolated_data_dir, monkeypatch, sample_workbook):
+    wb_path = sample_workbook()
+    _link_workbook(wb_path)
+    ct_config.TRACKING_DB_FILE.write_text(json.dumps({
+        "ARCH1111111": {"container_number": "ARCH1111111", "archived": True},
+    }))
+
+    def locked(path, cn, carrier="", status="NEW", record=None):
+        raise PermissionError("file in use")
+    monkeypatch.setattr(ct_bridge, "append_container_row", locked)
+
+    result = Bridge().restore_container("ARCH1111111")
+
+    assert result["ok"] is True
+    assert result["excel_write_failed"] is True
+    # archived flag still flipped — UI can show it as restored even
+    # though Excel will need a retry.
+    persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert persisted["ARCH1111111"]["archived"] is False
+
+
+def test_restore_container_missing_cn(isolated_data_dir):
+    result = Bridge().restore_container("ZZZZ9999999")
+    assert result["ok"] is False
+    assert "not in tracking" in (result["error"] or "").lower()
+    assert result["container"] is None
