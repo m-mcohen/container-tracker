@@ -1,6 +1,6 @@
 """Shared constants. Pure data; no side effects on import."""
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 APP_NAME = "Container Tracker"
 APP_SHORT_NAME = "ContainerTracker"

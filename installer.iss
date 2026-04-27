@@ -1,6 +1,6 @@
 #define AppName "Container Tracker"
 #define AppShortName "ContainerTracker"
-#define AppVersion "1.1.0"
+#define AppVersion "1.1.1"
 #define AppPublisher "Michael Cohen"
 #define AppExeName "ContainerTracker.exe"
 
