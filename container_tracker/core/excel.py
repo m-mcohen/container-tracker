@@ -231,8 +231,8 @@ def create_template_excel(path):
     for col, h in enumerate(headers, 1):
         ws.cell(row=1, column=col, value=h)
     for ri, (cn, ref, n) in enumerate(
-        [("MSKU1234567", "PO-2024-001", "Sample - replace"),
-         ("MSCU7654321", "PO-2024-002", "")], 2):
+        [("FAKE0000001", "PO-SAMPLE-001", "Replace with your data"),
+         ("FAKE0000002", "PO-SAMPLE-002", "Replace with your data")], 2):
         ws.cell(row=ri, column=1, value=cn)
         ws.cell(row=ri, column=2, value=ref)
         ws.cell(row=ri, column=3, value=n)
