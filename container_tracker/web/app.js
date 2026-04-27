@@ -198,11 +198,15 @@
     const live = ROWS.filter(r => !r.archived);
     const total = live.length;
     const archivedCount = ROWS.length - total;
-    const sailing = live.filter(r => r.status === "SAILING").length;
-    const arrived = live.filter(r => r.status === "ARRIVED" || r.status === "DISCHARGED").length;
+    // SAILING and DELAYED are mutually exclusive on the dashboard:
+    // a SAILING row with a positive delay shows up only in DELAYED.
+    // Matches statusClass()'s "delayed overlay" rule so the cards and
+    // the chip filter agree on every row's bucket.
     // `> 0` is load-bearing: Number(null) coerces to 0 and Number(undefined) to NaN,
     // both of which fail `> 0` correctly. Switching to `>= 0` would count nulls as delayed.
-    const delayed = live.filter(r => Number(r.delayVal) > 0).length;
+    const delayed = live.filter(r => r.status === "SAILING" && Number(r.delayVal) > 0).length;
+    const sailing = live.filter(r => r.status === "SAILING" && !(Number(r.delayVal) > 0)).length;
+    const arrived = live.filter(r => r.status === "ARRIVED" || r.status === "DISCHARGED").length;
     const booked  = live.filter(r => r.status === "BOOKED").length;
 
     setText("title-count", `· ${total} tracked`);
@@ -461,13 +465,58 @@
     });
   });
 
-  /* ─── Settings nav (highlight section + smooth scroll) ─── */
-  document.querySelectorAll(".settings-nav a").forEach(a => {
-    a.addEventListener("click", () => {
-      document.querySelectorAll(".settings-nav a").forEach(x => x.classList.remove("is-active"));
-      a.classList.add("is-active");
+  /* ─── Settings: API-key Show / Test buttons ─── */
+  const tokenShowBtn = document.getElementById("btn-token-show");
+  if (tokenShowBtn) {
+    tokenShowBtn.addEventListener("click", () => {
+      const input = document.getElementById("settings-token");
+      if (!input) return;
+      if (input.type === "password") {
+        input.type = "text";
+        tokenShowBtn.textContent = "Hide";
+      } else {
+        input.type = "password";
+        tokenShowBtn.textContent = "Show";
+      }
     });
-  });
+  }
+  const tokenTestBtn = document.getElementById("btn-token-test");
+  if (tokenTestBtn) {
+    tokenTestBtn.addEventListener("click", async () => {
+      // refresh_all is the only existing bridge call that exercises
+      // the saved token against ShipsGo. Side effect: triggers the
+      // same data-sync as the Refresh button. Acceptable for a manual
+      // smoke-test action; a dedicated test_api_token shim would be
+      // cleaner but lives outside this UI-only fix scope.
+      const original = tokenTestBtn.textContent;
+      tokenTestBtn.disabled = true;
+      tokenTestBtn.textContent = "Testing…";
+      let result;
+      try {
+        result = await Bridge.refresh_all();
+      } catch (e) {
+        showError(`Test failed: ${(e && e.message) || e}`);
+        tokenTestBtn.disabled = false;
+        tokenTestBtn.textContent = original;
+        return;
+      }
+      tokenTestBtn.disabled = false;
+      tokenTestBtn.textContent = original;
+      if (result && result.error) {
+        showError(`API key test failed: ${result.error}`);
+        return;
+      }
+      // No error from refresh_all means the token authenticated (or
+      // there was nothing to refresh, which is also fine on a fresh
+      // setup). Pull the fresh ROWS so the dashboard reflects the run.
+      try {
+        ROWS = await Bridge.list_containers();
+        render();
+        markRefreshed();
+      } catch (_e) { /* non-fatal */ }
+      showInfo("API key valid.");
+    });
+  }
 
   /* ─── Filter chips ─── */
   document.querySelectorAll(".toolbar .chip").forEach(c => {

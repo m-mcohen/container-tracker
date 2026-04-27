@@ -977,39 +977,7 @@
   }
 
   /* ─── Settings ─── */
-  .settings {
-    display: grid;
-    grid-template-columns: 220px 1fr;
-    gap: 24px;
-    align-items: start;
-  }
-  .settings-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    position: sticky;
-    top: calc(var(--header-h) + 16px);
-  }
-  .settings-nav a {
-    padding: 8px 10px;
-    border-radius: var(--r-btn);
-    font-size: 13px;
-    color: var(--text-secondary);
-    text-decoration: none;
-    cursor: pointer;
-    display: flex; align-items: center; gap: 8px;
-    font-weight: 500;
-  }
-  .settings-nav a:hover { background: var(--surface-hover); color: var(--text-primary); }
-  .settings-nav a:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
-  .settings-nav a.is-active {
-    background: var(--surface-card);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-primary);
-    box-shadow: var(--shadow-sm);
-  }
-  .settings-nav a svg { width: 15px; height: 15px; color: var(--text-hint); }
-  .settings-nav a.is-active svg { color: var(--accent); }
+  .settings { max-width: 760px; }
 
   .panel {
     background: var(--surface-card);
@@ -1068,8 +1036,6 @@
 
   @media (max-width: 1100px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
-    .settings { grid-template-columns: 1fr; }
-    .settings-nav { position: static; flex-direction: row; flex-wrap: wrap; }
   }
 
   /* ─── Step 6: error UI + loading state ───────────────────────────── */
