@@ -612,35 +612,6 @@
     font-weight: 600;
     letter-spacing: 0.02em;
   }
-  .carrier {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .carrier-badge {
-    width: 22px; height: 22px;
-    border-radius: 5px;
-    display: grid; place-items: center;
-    font-size: 9px;
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: 0.02em;
-    flex: none;
-  }
-  .c-MAEU { background: #0A3D7A; }
-  .c-MSCU { background: #1D4486; }
-  .c-CMDU { background: #8B1E3F; }
-  .c-HLCU { background: #D97706; }
-  .c-COSU { background: #A61E28; }
-  .c-EGLV { background: #0E7A4C; }
-  .c-ONEY { background: #E6389C; }
-  .c-ZIMU { background: #1F6FB2; }
-  .c-YMLU { background: #B45309; }
-  .c-HDMU { background: #4338CA; }
-  .c-OOLU { background: #BE123C; }
-  .c-PILU { background: #0F766E; }
-  .c-OTHER { background: #525252; }
-
   /* Status chips */
   .chip-status {
     display: inline-flex;

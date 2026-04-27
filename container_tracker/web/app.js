@@ -272,7 +272,7 @@
         <tr data-cn="${r.cn}"${isArchived ? ' class="is-archived"' : ''}>
           <td><input type="checkbox" class="row-select" data-cn="${r.cn}" aria-label="Select ${r.cn}" onclick="event.stopPropagation()"${checkAttr} /></td>
           <td><span class="cn">${r.cn}</span></td>
-          <td><span class="carrier"><span class="carrier-badge c-${r.scac}">${r.scac}</span>${r.carrier}</span></td>
+          <td>${r.carrier || '<span class="muted">—</span>'}</td>
           <td>${statusBadge}</td>
           <td>${r.orig || '<span class="muted">—</span>'}</td>
           <td>${r.eta || '<span class="muted">—</span>'}</td>
