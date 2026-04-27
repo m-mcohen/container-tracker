@@ -471,13 +471,15 @@
     tokenShowBtn.addEventListener("click", () => {
       const input = document.getElementById("settings-token");
       if (!input) return;
-      if (input.type === "password") {
-        input.type = "text";
-        tokenShowBtn.textContent = "Hide";
-      } else {
-        input.type = "password";
-        tokenShowBtn.textContent = "Show";
-      }
+      // Read via getAttribute so we see the live HTML attribute, not a
+      // cached DOM-property read. Write via both setAttribute and the
+      // .type property — some webview engines update one but not the
+      // other when the property setter is used alone.
+      const isPassword = input.getAttribute("type") === "password";
+      const next = isPassword ? "text" : "password";
+      input.setAttribute("type", next);
+      input.type = next;
+      tokenShowBtn.textContent = isPassword ? "Hide" : "Show";
     });
   }
   const tokenTestBtn = document.getElementById("btn-token-test");
@@ -495,7 +497,7 @@
       try {
         result = await Bridge.refresh_all();
       } catch (e) {
-        showError(`Test failed: ${(e && e.message) || e}`);
+        showError(`API key test failed: ${(e && e.message) || e}`);
         tokenTestBtn.disabled = false;
         tokenTestBtn.textContent = original;
         return;
