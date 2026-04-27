@@ -334,13 +334,19 @@
     const companyEl = document.getElementById("settings-company");
     if (companyEl) companyEl.value = s.company_name || "";
     const tokInput = document.getElementById("settings-token");
+    const tokVisible = document.getElementById("settings-token-visible");
+    // Always blank — token never crosses the bridge to JS. Placeholder
+    // signals "already set, leave blank to keep" vs. "not set yet".
+    const placeholder = s.api_token_present
+      ? "••••••••••••••••"
+      : "Enter your ShipsGo API key";
     if (tokInput) {
-      // Always blank — token never crosses the bridge to JS. Placeholder
-      // signals "already set, leave blank to keep" vs. "not set yet".
       tokInput.value = "";
-      tokInput.placeholder = s.api_token_present
-        ? "••••••••••••••••"
-        : "Enter your ShipsGo API key";
+      tokInput.placeholder = placeholder;
+    }
+    if (tokVisible) {
+      tokVisible.value = "";
+      tokVisible.placeholder = placeholder;
     }
     const excelEl = document.getElementById("excel-current-path");
     if (excelEl) excelEl.textContent = s.excel_path || "No file linked";
@@ -466,20 +472,33 @@
   });
 
   /* ─── Settings: API-key Show / Test buttons ─── */
+  // WebView2 blocks dynamic type-attribute changes on password inputs
+  // for security, so toggling input.type fails silently. The fix is to
+  // render two parallel inputs (one masked, one plain) and swap their
+  // visibility. Two-way input listeners keep their values in lockstep
+  // so handleSaveSettings can read whichever the user typed in.
+  const tokenMasked = document.getElementById("settings-token");
+  const tokenVisible = document.getElementById("settings-token-visible");
+  if (tokenMasked && tokenVisible) {
+    tokenMasked.addEventListener("input", () => { tokenVisible.value = tokenMasked.value; });
+    tokenVisible.addEventListener("input", () => { tokenMasked.value = tokenVisible.value; });
+  }
   const tokenShowBtn = document.getElementById("btn-token-show");
   if (tokenShowBtn) {
     tokenShowBtn.addEventListener("click", () => {
-      const input = document.getElementById("settings-token");
-      if (!input) return;
-      // Read via getAttribute so we see the live HTML attribute, not a
-      // cached DOM-property read. Write via both setAttribute and the
-      // .type property — some webview engines update one but not the
-      // other when the property setter is used alone.
-      const isPassword = input.getAttribute("type") === "password";
-      const next = isPassword ? "text" : "password";
-      input.setAttribute("type", next);
-      input.type = next;
-      tokenShowBtn.textContent = isPassword ? "Hide" : "Show";
+      if (!tokenMasked || !tokenVisible) return;
+      const showing = tokenVisible.style.display !== "none";
+      if (showing) {
+        tokenMasked.value = tokenVisible.value;
+        tokenVisible.style.display = "none";
+        tokenMasked.style.display = "";
+        tokenShowBtn.textContent = "Show";
+      } else {
+        tokenVisible.value = tokenMasked.value;
+        tokenMasked.style.display = "none";
+        tokenVisible.style.display = "";
+        tokenShowBtn.textContent = "Hide";
+      }
     });
   }
   const tokenTestBtn = document.getElementById("btn-token-test");
