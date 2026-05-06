@@ -112,8 +112,9 @@
         </button>
 
         <button class="iconbtn" type="button" data-view="settings" title="Settings">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.7M8 12.8v1.7M14.5 8h-1.7M3.2 8H1.5M12.6 3.4l-1.2 1.2M4.6 11.4l-1.2 1.2M12.6 12.6l-1.2-1.2M4.6 4.6L3.4 3.4"/>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+            <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/>
           </svg>
         </button>
       </div>
@@ -235,23 +236,16 @@
         <label class="field">
           <span class="field__lbl">
             ShipsGo API key
-            <a class="field__hint" href="https://shipsgo.com" target="_blank" rel="noreferrer">Get one →</a>
+            <a id="link-shipsgo" class="field__hint" href="https://shipsgo.com" rel="noreferrer">Get one →</a>
           </span>
           <div class="field__token-row">
             <input id="settings-token" class="field__input field__input--mono" type="password" placeholder="sg_live_…" />
-            <input id="settings-token-visible" class="field__input field__input--mono" type="text" placeholder="sg_live_…" style="display:none" />
+            <input id="settings-token-visible" class="field__input field__input--mono" type="text" placeholder="sg_live_…" hidden />
             <button id="btn-token-show" class="btn btn--ghost btn--sm" type="button">Show</button>
             <button id="btn-token-test" class="btn btn--ghost btn--sm" type="button">Test</button>
           </div>
         </label>
 
-        <div class="toggle-row">
-          <label for="dark-toggle-settings">Dark mode</label>
-          <label class="switch">
-            <input id="dark-toggle-settings" type="checkbox" />
-            <span class="slider"></span>
-          </label>
-        </div>
       </div>
 
       <div class="settings-card">
@@ -275,7 +269,6 @@
         <div class="info">
           <div class="info__row"><span class="info__lbl">Version</span><span class="info__val">v2.4.1</span></div>
           <div class="info__row"><span class="info__lbl">Data folder</span><a class="info__link" href="#">Open in Explorer</a></div>
-          <div class="info__row"><span class="info__lbl">Repository</span><a class="info__link" href="#">github.com/your-org/container-tracker</a></div>
         </div>
       </div>
 

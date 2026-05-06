@@ -501,18 +501,26 @@
   if (tokenShowBtn) {
     tokenShowBtn.addEventListener("click", () => {
       if (!tokenMasked || !tokenVisible) return;
-      const showing = tokenVisible.style.display !== "none";
+      const showing = !tokenVisible.hidden;
       if (showing) {
         tokenMasked.value = tokenVisible.value;
-        tokenVisible.style.display = "none";
-        tokenMasked.style.display = "";
+        tokenVisible.hidden = true;
+        tokenMasked.hidden = false;
         tokenShowBtn.textContent = "Show";
       } else {
         tokenVisible.value = tokenMasked.value;
-        tokenMasked.style.display = "none";
-        tokenVisible.style.display = "";
+        tokenMasked.hidden = true;
+        tokenVisible.hidden = false;
         tokenShowBtn.textContent = "Hide";
       }
+    });
+  }
+  const shipsgoLink = document.getElementById("link-shipsgo");
+  if (shipsgoLink) {
+    shipsgoLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.open("https://shipsgo.com", "_blank");
     });
   }
   const tokenTestBtn = document.getElementById("btn-token-test");
