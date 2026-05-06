@@ -253,38 +253,52 @@
     TBODY.innerHTML = filtered.map(r => {
       const isArchived = r.archived === true;
       const cls = isArchived ? "archived" : statusClass(r);
-      const delayCls = r.delayVal > 0 ? "delay-pos" : (r.delayVal < 0 ? "delay-neg" : "delay-neutral");
+      const delayCls =
+        r.delayVal > 0 ? "delay-pos" :
+        r.delayVal < 0 ? "delay-neg" : "delay-neutral";
+
       const pctHtml = r.pct === null
-        ? `<span class="muted" style="font-size:11px">Not yet sailed</span>`
-        : `<div class="transit-bar"><div class="transit-fill ${cls}" style="width:${r.pct}%;"></div></div><div class="transit-pct">${r.pct}%</div>`;
+        ? `<span class="muted">Not yet sailed</span>`
+        : `<div class="transit">
+             <div class="transit-bar"><div class="transit-fill ${cls}" style="width:${r.pct}%;"></div></div>
+             <span class="transit-pct">${r.pct}%</span>
+           </div>`;
+
       const routeHtml = !r.pol
         ? `<span class="muted">—</span>`
         : `<span class="route"><span>${r.pol}</span><span class="arrow">→</span><span>${r.pod}</span></span>`;
+
       const statusBadge = isArchived
         ? `<span class="chip-status archived"><span class="dot"></span>Archived</span>`
         : `<span class="chip-status ${cls}"><span class="dot"></span>${statusLabel(r)}</span>`;
+
       const actionsCell = isArchived
-        ? `<button class="row-action-restore" type="button" data-action="restore" data-cn="${r.cn}" aria-label="Restore ${r.cn}">Restore</button>`
+        ? `<button class="row-action-restore" type="button" data-action="restore" data-cn="${r.cn}">Restore</button>`
         : `<div class="row-actions">
-              <button class="row-action" data-action="refresh" data-cn="${r.cn}" aria-label="Refresh ${r.cn}" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
-              <button class="row-action" data-action="more" data-cn="${r.cn}" aria-label="More actions for ${r.cn}" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
-            </div>`;
+             <button class="row-action" type="button" data-action="refresh" data-cn="${r.cn}" title="Refresh this container">
+               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.5-4M14 8a6 6 0 0 1-10.5 4"/><path d="M12 1.5v3h-3M4 14.5v-3h3"/></svg>
+             </button>
+             <button class="row-action" type="button" data-action="more" data-cn="${r.cn}" title="More actions">
+               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="3" cy="8" r=".9"/><circle cx="8" cy="8" r=".9"/><circle cx="13" cy="8" r=".9"/></svg>
+             </button>
+           </div>`;
+
       const checkAttr = SELECTED.has(r.cn) ? " checked" : "";
-      // Archived rows are now selectable in the Archived view so they
-      // can drive bulk-restore — no per-row disabled.
+      const trClass   = isArchived ? "is-archived" : "";
+
       return `
-        <tr data-cn="${r.cn}"${isArchived ? ' class="is-archived"' : ''}>
-          <td><input type="checkbox" class="row-select" data-cn="${r.cn}" aria-label="Select ${r.cn}" onclick="event.stopPropagation()"${checkAttr} /></td>
+        <tr data-cn="${r.cn}"${trClass ? ` class="${trClass}"` : ''}>
+          <td class="col-check"><input type="checkbox" class="row-select" data-cn="${r.cn}" onclick="event.stopPropagation()"${checkAttr} /></td>
           <td><span class="cn">${r.cn}</span></td>
           <td>${r.carrier || '<span class="muted">—</span>'}</td>
           <td>${statusBadge}</td>
-          <td>${r.orig || '<span class="muted">—</span>'}</td>
-          <td>${r.eta || '<span class="muted">—</span>'}</td>
-          <td><span class="${delayCls}">${r.delay || '—'}</span></td>
+          <td class="col-num">${r.orig || '<span class="muted">—</span>'}</td>
+          <td class="col-num">${r.eta  || '<span class="muted">—</span>'}</td>
+          <td class="col-num"><span class="${delayCls}">${r.delay || '—'}</span></td>
           <td>${routeHtml}</td>
           <td>${r.vessel || '<span class="muted">—</span>'}</td>
-          <td><div class="transit">${pctHtml}</div></td>
-          <td>${actionsCell}</td>
+          <td class="col-num">${pctHtml}</td>
+          <td class="col-num">${actionsCell}</td>
         </tr>`;
     }).join("");
 
@@ -566,8 +580,15 @@
     if (sw) sw.setAttribute("aria-checked", dark ? "true" : "false");
     const cb = document.getElementById("dark-toggle-settings");
     if (cb) cb.checked = !!dark;
+    try { localStorage.setItem("ct.theme", dark ? "dark" : "light"); } catch (e) {}
   }
-  document.getElementById("theme-switch").addEventListener("click", () => {
+  (function restoreTheme() {
+    try {
+      const saved = localStorage.getItem("ct.theme");
+      if (saved === "dark" || saved === "light") setTheme(saved === "dark");
+    } catch (e) {}
+  })();
+  document.getElementById("theme-switch")?.addEventListener("click", () => {
     const isDark = document.documentElement.getAttribute("data-theme") === "dark";
     setTheme(!isDark);
   });
@@ -874,7 +895,26 @@
     menu.dataset.cn = "";
   }
 
-  TBODY.addEventListener("click", (e) => {
+  TBODY.addEventListener("click", async (e) => {
+    const refreshBtn = e.target.closest('[data-action="refresh"]');
+    if (refreshBtn) {
+      const cn = refreshBtn.dataset.cn;
+      refreshBtn.disabled = true;
+      refreshBtn.classList.add("is-loading");
+      try {
+        const res = await Bridge.refresh_one(cn);
+        if (res?.error) _showToast(res.error, "err");
+        else _showToast(`${cn} refreshed`, "ok");
+        ROWS = await Bridge.list_containers();
+        render();
+      } finally {
+        // row will be re-rendered, but if not:
+        refreshBtn.disabled = false;
+        refreshBtn.classList.remove("is-loading");
+      }
+      return;
+    }
+
     const moreBtn = e.target.closest("[data-action='more']");
     if (moreBtn) {
       e.stopPropagation();
