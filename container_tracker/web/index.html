@@ -3,389 +3,437 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=1280" />
-  <title>Container Tracker</title>
+  <title>Container Tracker v1.1.1</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div id="app" class="app">
 
-    <!-- ============================================================= -->
-    <!-- Notifications stack (update banner + advisory banners)        -->
-    <!-- ============================================================= -->
-    <div class="notifications">
+<div class="app" id="app">
 
-      <!-- Update banner — JS toggles `hidden` and the dismiss button removes it -->
-      <div id="update-banner" class="banner banner--update" hidden>
-        <span class="banner__pip"></span>
-        <span class="banner__text">
-          <strong>A new version is available.</strong>
-          Restart the app to update.
-        </span>
-        <button class="banner__action" type="button">View notes</button>
-        <button class="dismiss" type="button" aria-label="Dismiss">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-        </button>
-      </div>
+  <!-- ─── Main column (sidebar removed; brand lives in topbar) ─── -->
+  <main class="main">
 
-      <!-- Unmatched-containers advisory -->
-      <div id="notice-unmatched" class="banner banner--warn" hidden>
-        <span class="banner__pip"></span>
-        <span class="banner__text">
-          <strong id="notice-unmatched-title">3 containers in your workbook aren't tracked yet.</strong>
-          Register them to start polling ETAs.
-        </span>
-        <button id="notice-register" class="banner__action" type="button">Register…</button>
-        <button id="notice-skip" class="dismiss" type="button" aria-label="Skip">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-        </button>
-      </div>
-
-      <!-- Excel write-failed advisory -->
-      <div id="notice-excel-write-failed" class="banner banner--bad" hidden>
-        <span class="banner__pip"></span>
-        <span class="banner__text">
-          <strong>Couldn't write to your workbook.</strong>
-          It may be open in Excel — close it and refresh again.
-        </span>
-        <button id="notice-excel-dismiss" class="dismiss" type="button" aria-label="Dismiss">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-        </button>
-      </div>
-
-      <!-- Excel-missing advisory -->
-      <div id="notice-excel-missing" class="banner banner--warn" hidden>
-        <span class="banner__pip"></span>
-        <span class="banner__text">
-          <strong>No workbook linked yet.</strong>
-          Browse to an existing file or create a template to get started.
-        </span>
-      </div>
-    </div>
-
-    <!-- ============================================================= -->
-    <!-- Topbar                                                         -->
-    <!-- ============================================================= -->
-    <header class="topbar">
-      <div class="topbar__brand" data-view="dashboard" style="cursor:pointer">
-        <div class="topbar__mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="7" width="18" height="11" rx="1.2"/>
-            <path d="M7 7v11M11 7v11M15 7v11M19 7v11M3 12h18"/>
-          </svg>
+    <!-- ═══ DASHBOARD ═══ -->
+    <section class="view is-active" id="view-dashboard">
+      <header class="topbar">
+        <a class="brand" href="#" data-view="dashboard" aria-label="Container Tracker — back to dashboard">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M5 11h2M9 11h2M13 11h2M17 11h2M5 15h2M9 15h2M13 15h2M17 15h2"/></svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Container Tracker</span>
+            <span class="brand-company"></span>
+          </span>
+        </a>
+        <div class="divider" aria-hidden="true"></div>
+        <div class="page-title">Shipments <span class="muted" id="title-count">· 0 tracked</span></div>
+        <div class="spacer"></div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input id="search" type="text" placeholder="Search container, vessel, route…" />
+          <span class="kbd">Ctrl+K</span>
         </div>
-        <div class="topbar__title">
-          <h1>Container Tracker <span id="title-count">0</span></h1>
-          <span class="topbar__sub">ShipsGo · Operations</span>
-        </div>
-      </div>
-
-      <div class="topbar__center">
-        <label class="search">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
-          <input id="search" type="search" placeholder="Search container, vessel, route…" autocomplete="off" />
-          <kbd>⌃K</kbd>
-        </label>
-      </div>
-
-      <div class="topbar__right">
-        <div class="status-pill">
-          <span class="dot"></span>
-          <span>Synced <span id="last-refresh">just now</span></span>
-        </div>
-
-        <button id="btn-refresh" class="btn btn--primary btn--sm" type="button" title="Refresh all ETAs (⌘R)">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8a6 6 0 0 1 10.5-4M14 8a6 6 0 0 1-10.5 4"/><path d="M12 1.5v3h-3M4 14.5v-3h3"/></svg>
+        <button class="theme-switch" id="theme-switch" role="switch" aria-checked="false" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+        <button class="icon-btn" data-view="settings" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.34.22.7.22 1.07 0 .36-.08.72-.22 1.07z"/></svg>
+        </button>
+        <button class="btn" id="btn-open-excel-toolbar" disabled title="Link an Excel file in Settings to enable">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          Open in Excel
+        </button>
+        <button class="btn" id="btn-open-add">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add container
+        </button>
+        <button class="btn btn-primary" id="btn-refresh" title="Refresh All ETAs & Update Excel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
           Refresh
         </button>
+      </header>
 
-        <button id="btn-open-add" class="btn btn--ghost btn--sm" type="button" title="Add container">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
-          Add
-        </button>
+      <div class="content">
 
-        <button id="btn-open-excel-toolbar" class="iconbtn" type="button" title="Open linked workbook">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5H4A1.5 1.5 0 0 0 2.5 3v10A1.5 1.5 0 0 0 4 14.5h8A1.5 1.5 0 0 0 13.5 13V6L9 1.5z"/><path d="M9 1.5V6h4.5"/></svg>
-        </button>
-
-        <button id="theme-switch" class="iconbtn" type="button" role="switch" aria-checked="false" title="Toggle dark mode">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.7 10.4a5 5 0 0 1-6.1-6.1 5 5 0 1 0 6.1 6.1z"/></svg>
-        </button>
-
-        <button class="iconbtn" type="button" data-view="settings" title="Settings">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
-            <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/>
-          </svg>
-        </button>
-      </div>
-    </header>
-
-    <!-- ============================================================= -->
-    <!-- Dashboard view                                                 -->
-    <!-- ============================================================= -->
-    <section id="view-dashboard" class="view is-active" data-view="dashboard">
-
-      <!-- KPI cards -->
-      <div class="kpis">
-        <div class="kpi kpi--neutral">
-          <div class="kpi__row"><span class="kpi__label">Tracked</span></div>
-          <div class="kpi__value" id="kpi-tracked">0</div>
-          <div class="kpi__sub" id="kpi-tracked-sub">—</div>
-        </div>
-        <div class="kpi kpi--sail">
-          <div class="kpi__row"><span class="kpi__label">Sailing</span></div>
-          <div class="kpi__value" id="kpi-sailing">0</div>
-          <div class="kpi__sub" id="kpi-sailing-sub">—</div>
-        </div>
-        <div class="kpi kpi--arr">
-          <div class="kpi__row"><span class="kpi__label">Arrived</span></div>
-          <div class="kpi__value" id="kpi-arrived">0</div>
-          <div class="kpi__sub" id="kpi-arrived-sub">—</div>
-        </div>
-        <div class="kpi kpi--del">
-          <div class="kpi__row"><span class="kpi__label">Delayed</span></div>
-          <div class="kpi__value" id="kpi-delayed">0</div>
-          <div class="kpi__sub" id="kpi-delayed-sub">—</div>
-        </div>
-      </div>
-
-      <!-- Toolbar: filter chips -->
-      <div class="toolbar">
-        <div class="toolbar__chips">
-          <button class="chip is-active" type="button" data-filter="all"      aria-pressed="true">All <span class="chip__count" id="chip-count-all">0</span></button>
-          <button class="chip"           type="button" data-filter="delayed"  aria-pressed="false">Delayed <span class="chip__count" id="chip-count-delayed">0</span></button>
-          <button class="chip"           type="button" data-filter="sailing"  aria-pressed="false">Sailing <span class="chip__count" id="chip-count-sailing">0</span></button>
-          <button class="chip"           type="button" data-filter="arrived"  aria-pressed="false">Arrived <span class="chip__count" id="chip-count-arrived">0</span></button>
-          <button class="chip"           type="button" data-filter="booked"   aria-pressed="false">Booked <span class="chip__count" id="chip-count-booked">0</span></button>
-          <button class="chip"           type="button" data-filter="archived" aria-pressed="false">Archived <span class="chip__count" id="chip-count-archived">0</span></button>
-        </div>
-        <div class="toolbar__spacer"></div>
-      </div>
-
-      <!-- Bulk action bar (hidden until selection) -->
-      <div id="bulk-bar" class="bulkbar" hidden>
-        <span class="bulkbar__count"><span id="bulk-count">0</span> selected</span>
-        <button id="bulk-clear" class="btn btn--ghost btn--sm" type="button">Clear</button>
-        <span class="bulkbar__spacer"></span>
-        <button id="bulk-restore" class="btn btn--ghost btn--sm" type="button" hidden>Restore</button>
-        <button id="bulk-archive" class="btn btn--danger btn--sm" type="button" hidden>Archive…</button>
-      </div>
-
-      <!-- Table -->
-      <div class="tablewrap">
-        <table class="shipments">
-          <thead>
-            <tr>
-              <th class="col-check"><input type="checkbox" class="row-select" aria-label="Select all" /></th>
-              <th class="col-cn">Container</th>
-              <th>Carrier</th>
-              <th>Status</th>
-              <th class="col-num">Original ETA</th>
-              <th class="col-num">Current ETA</th>
-              <th class="col-num">Delay</th>
-              <th>Route</th>
-              <th>Vessel</th>
-              <th class="col-num">Transit</th>
-              <th class="col-num"></th>
-            </tr>
-          </thead>
-          <tbody id="shipments-tbody"></tbody>
-        </table>
-      </div>
-
-      <div class="tablefoot">
-        <span><span id="row-count">0</span> shown</span>
-        <span>·</span>
-        <span><span id="row-total">0</span> total</span>
-        <span class="tablefoot__spacer"></span>
-      </div>
-
-      <!-- Activity drawer -->
-      <section id="activity-panel" class="activity is-collapsed">
-        <button id="activity-toggle" type="button" aria-expanded="false" aria-controls="activity-body">
-          <svg class="chev" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"/></svg>
-          <span class="activity__title">Activity</span>
-          <span class="activity__count">0 events</span>
-          <span class="activity__last"></span>
-        </button>
-        <div id="activity-body" class="activity-body" role="region" aria-label="Activity log">
-          <div class="activity-line"><span class="activity-time">—:—:—</span><span class="activity-msg">No activity yet.</span></div>
-        </div>
-      </section>
-
-      <!-- Footer -->
-      <footer class="footer">
-        <span>Powered by ShipsGo API</span>
-        <span class="footer__spacer"></span>
-        <span>Refreshes are free &amp; unlimited · All times EST</span>
-      </footer>
-    </section>
-
-    <!-- ============================================================= -->
-    <!-- Settings view (routed, not a modal)                            -->
-    <!-- ============================================================= -->
-    <section class="view" data-view="settings" id="view-settings">
-      <div class="settings-card">
-        <h2>Workspace</h2>
-
-        <label class="field">
-          <span class="field__lbl">Company name</span>
-          <input id="settings-company" class="field__input" type="text" placeholder="Your company" />
-        </label>
-
-        <label class="field">
-          <span class="field__lbl">
-            ShipsGo API key
-            <a id="link-shipsgo" class="field__hint" href="https://shipsgo.com" rel="noreferrer">Get one →</a>
-          </span>
-          <div class="field__token-row">
-            <input id="settings-token" class="field__input field__input--mono" type="password" placeholder="sg_live_…" />
-            <input id="settings-token-visible" class="field__input field__input--mono" type="text" placeholder="sg_live_…" hidden />
-            <button id="btn-token-show" class="btn btn--ghost btn--sm" type="button">Show</button>
-            <button id="btn-token-test" class="btn btn--ghost btn--sm" type="button">Test</button>
+        <!-- Notification stack — update banner + inline notices share a single column -->
+        <div class="notifications" role="region" aria-label="Notifications">
+          <!-- Update banner — hidden until check_for_update() returns a newer release. JS populates the version text and the download link. -->
+          <div class="banner" role="status" id="update-banner" hidden>
+            <span class="pill">New</span>
+            <span class="banner-text"></span>
+            <a href="#" class="banner-link">Download update →</a>
+            <button class="dismiss" title="Dismiss" aria-label="Dismiss update notice">×</button>
           </div>
-        </label>
+          <!-- Unmatched-containers notice — hidden until refresh_all() returns containers in Excel that aren't on ShipsGo. JS fills in the count and credit cost. -->
+          <div class="notice" id="notice-unmatched" hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <div class="notice-body">
+              <strong class="notice-title" id="notice-unmatched-title"></strong>
+              <span class="notice-detail">They aren't on ShipsGo yet. Register them now or skip until next refresh.</span>
+            </div>
+            <div class="notice-actions">
+              <button class="btn btn-sm" id="notice-skip">Skip</button>
+              <button class="btn btn-sm btn-primary" id="notice-register">Register all</button>
+            </div>
+          </div>
+          <!-- Excel-missing banner — hidden until refresh_all returns excel_missing=true (config has a path but the file's gone). Persists until the user re-links via Settings and the next refresh clears it. -->
+          <div class="notice notice-warning" id="notice-excel-missing" hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="notice-body">
+              <strong class="notice-title">Linked Excel file not found</strong>
+              <span class="notice-detail">Re-link it in Settings. Tracking data is still being updated.</span>
+            </div>
+            <div class="notice-actions">
+              <button class="btn btn-sm btn-primary" data-view="settings">Open Settings</button>
+            </div>
+          </div>
+          <!-- Excel-write-failed banner — hidden until refresh_all returns excel_write_failed=true. Persists until the next successful refresh clears it. -->
+          <div class="notice notice-warning" id="notice-excel-write-failed" hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="notice-body">
+              <strong class="notice-title">Excel write skipped</strong>
+              <span class="notice-detail">Close the workbook in Excel and click Refresh to sync. Tracking data was still updated.</span>
+            </div>
+            <div class="notice-actions">
+              <button class="btn btn-sm" id="notice-excel-dismiss">Dismiss</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Linked spreadsheet card — deferred until Excel-link wiring step.
+             Hidden via the [hidden] attribute; will be unhidden when the
+             bridge method, file picker, and persistence are in place. -->
+        <div class="spreadsheet-card" hidden>
+          <div class="xls-icon">XLSX</div>
+          <div class="meta">
+            <div class="label">Linked spreadsheet</div>
+            <div class="path" title="C:\Users\michael\Documents\Container_Tracking.xlsx">C:\Users\michael\Documents\Container_Tracking.xlsx</div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-sm">Browse…</button>
+            <button class="btn btn-sm">Create template</button>
+            <button class="btn btn-sm btn-primary">Open in Excel</button>
+          </div>
+        </div>
+
+        <!-- Bulk action bar — visible when one or more row checkboxes are selected. -->
+        <div class="bulk-bar" id="bulk-bar" hidden>
+          <span class="bulk-count" id="bulk-count">0 containers selected</span>
+          <div class="spacer"></div>
+          <a href="#" class="bulk-clear" id="bulk-clear">Clear selection</a>
+          <button type="button" class="btn btn-primary btn-sm" id="bulk-archive">Archive selected</button>
+          <button type="button" class="btn btn-primary btn-sm" id="bulk-restore" hidden>Restore selected</button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label"><span class="dot"></span>Tracked</div>
+            <div class="stat-number" id="kpi-tracked">0</div>
+            <div class="stat-sub" id="kpi-tracked-sub"></div>
+          </div>
+          <div class="stat is-sailing">
+            <div class="stat-label"><span class="dot"></span>Sailing</div>
+            <div class="stat-number" id="kpi-sailing">0</div>
+            <div class="stat-sub" id="kpi-sailing-sub"></div>
+          </div>
+          <div class="stat is-arrived">
+            <div class="stat-label"><span class="dot"></span>Arrived</div>
+            <div class="stat-number" id="kpi-arrived">0</div>
+            <div class="stat-sub" id="kpi-arrived-sub"></div>
+          </div>
+          <div class="stat is-delayed">
+            <div class="stat-label"><span class="dot"></span>Delayed</div>
+            <div class="stat-number" id="kpi-delayed">0</div>
+            <div class="stat-sub" id="kpi-delayed-sub"></div>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar" role="toolbar" aria-label="Filter shipments by status">
+          <button type="button" class="chip is-active" data-filter="all" aria-pressed="true">All <span class="count" id="chip-count-all">0</span></button>
+          <button type="button" class="chip" data-filter="delayed" aria-pressed="false">Delayed <span class="count" id="chip-count-delayed">0</span></button>
+          <button type="button" class="chip" data-filter="sailing" aria-pressed="false">Sailing <span class="count" id="chip-count-sailing">0</span></button>
+          <button type="button" class="chip" data-filter="arrived" aria-pressed="false">Arrived <span class="count" id="chip-count-arrived">0</span></button>
+          <button type="button" class="chip" data-filter="booked" aria-pressed="false">Booked <span class="count" id="chip-count-booked">0</span></button>
+          <button type="button" class="chip" data-filter="archived" aria-pressed="false">Archived <span class="count" id="chip-count-archived">0</span></button>
+          <div class="spacer"></div>
+          <span class="refresh-meta">Last refreshed <span class="time" id="last-refresh"></span></span>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+          <table class="shipments">
+            <thead>
+              <tr>
+                <th style="width: 36px;"><input type="checkbox" aria-label="Select all" /></th>
+                <th>Container #</th>
+                <th>Carrier</th>
+                <th>Status</th>
+                <th>Original ETA</th>
+                <th>Current ETA</th>
+                <th>Delay</th>
+                <th>Route</th>
+                <th>Vessel</th>
+                <th style="min-width:150px">Transit</th>
+                <th style="width:64px"><span class="vh">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody id="shipments-tbody"></tbody>
+          </table>
+          <div class="table-footer">
+            <span>Showing <strong id="row-count">0</strong> of <strong id="row-total">0</strong> containers</span>
+          </div>
+        </div>
+
+        <!-- Activity log (collapsible — collapsed by default; click header to expand) -->
+        <div class="activity-panel is-collapsed" id="activity-panel">
+          <button type="button" class="activity-header" id="activity-toggle" aria-expanded="false" aria-controls="activity-body">
+            <svg class="toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+            <span class="label">Activity log</span>
+            <div class="spacer"></div>
+            <span class="muted" style="font-size:11px">Last 50 events</span>
+          </button>
+          <div class="activity-body" id="activity-body">
+<div><span class="ts">[3:12 PM]</span> <span class="ok">Refreshed 10 containers — 3:12 PM EST</span></div>
+<div><span class="ts">[3:12 PM]</span> Updated 10 rows in Excel</div>
+<div><span class="ts">[3:12 PM]</span> --- DONE: 10 matched, 0 unmatched, 2 actively delayed, 10 Excel rows updated ---</div>
+<div><span class="ts">[3:12 PM]</span> &nbsp;&nbsp;EGLV5555666: SAILING | ETA: 2026-04-22 | Kaohsiung -> Los Angeles | DELAYED +7 days</div>
+<div><span class="ts">[3:12 PM]</span> &nbsp;&nbsp;MSKU1234567: SAILING | ETA: 2026-05-05 | Shanghai -> Los Angeles | DELAYED +4 days</div>
+<div><span class="ts">[3:12 PM]</span> Read 10 containers from Excel</div>
+<div><span class="ts">[3:12 PM]</span> Found 10 shipments on ShipsGo</div>
+<div><span class="ts">[3:12 PM]</span> Refreshing...</div>
+          </div>
+        </div>
 
       </div>
 
-      <div class="settings-card">
-        <h2>Workbook</h2>
-        <div class="settings-row">
-          <span class="lbl">Linked file</span>
-          <span class="val" id="excel-current-path">— none —</span>
-        </div>
-        <div class="settings-row">
-          <span class="lbl">Actions</span>
-          <span>
-            <button id="btn-excel-browse" class="btn btn--ghost btn--sm" type="button">Browse…</button>
-            <button id="btn-excel-create" class="btn btn--ghost btn--sm" type="button">New template</button>
-            <button id="btn-excel-open"   class="btn btn--ghost btn--sm" type="button">Open in Excel</button>
-          </span>
-        </div>
-      </div>
-
-      <div class="settings-card">
-        <h2>About</h2>
-        <div class="info">
-          <div class="info__row"><span class="info__lbl">Version</span><span class="info__val">v2.4.1</span></div>
-          <div class="info__row"><span class="info__lbl">Data folder</span><a class="info__link" href="#">Open in Explorer</a></div>
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;max-width:620px">
-        <button id="btn-settings-save" class="btn btn--primary btn--sm" type="button">Save changes</button>
+      <div class="footer-meta">
+        <span class="live">Live data from ShipsGo API</span>
+        <span class="dot-sep">•</span>
+        <span>All times EST</span>
+        <span class="dot-sep">•</span>
+        <span>Refreshes are free &amp; unlimited</span>
       </div>
     </section>
 
-    <!-- ============================================================= -->
-    <!-- Modals                                                         -->
-    <!-- ============================================================= -->
+    <!-- ═══ SETTINGS ═══ -->
+    <section class="view" id="view-settings">
+      <header class="topbar">
+        <a class="brand" href="#" data-view="dashboard" aria-label="Container Tracker — back to dashboard">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M5 11h2M9 11h2M13 11h2M17 11h2M5 15h2M9 15h2M13 15h2M17 15h2"/></svg>
+          </span>
+          <span class="brand-text">
+            <span class="brand-name">Container Tracker</span>
+            <span class="brand-company"></span>
+          </span>
+        </a>
+        <div class="divider" aria-hidden="true"></div>
+        <button class="icon-btn" data-view="dashboard" aria-label="Back to shipments" title="Back to shipments">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="page-title">Settings</div>
+        <div class="spacer"></div>
+        <button class="btn" data-view="dashboard">Cancel</button>
+        <button class="btn btn-primary" id="btn-settings-save">Save changes</button>
+      </header>
 
-    <!-- Add container -->
-    <div id="modal-add" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-add-title">
-      <div class="modal__panel">
-        <div class="modal__hd">
-          <h2 id="modal-add-title">Add container</h2>
-          <button class="iconbtn" type="button" data-close-modal aria-label="Close">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-          </button>
-        </div>
-        <div class="modal__body">
-          <label class="field">
-            <span class="field__lbl">Container number</span>
-            <input id="f-cn" class="field__input field__input--mono" type="text" placeholder="MSCU1234567" autocomplete="off" />
-          </label>
-          <label class="field">
-            <span class="field__lbl">Carrier</span>
-            <select id="f-carrier" class="field__input"></select>
-          </label>
-          <div id="add-error" class="modal__error" hidden></div>
-        </div>
-        <div class="modal__ft">
-          <button class="btn btn--ghost btn--sm" type="button" data-close-modal>Cancel</button>
-          <button id="btn-add-submit" class="btn btn--primary btn--sm" type="button">Add &amp; track</button>
+      <div class="content">
+        <div class="settings">
+          <!-- Account -->
+          <div class="panel">
+            <h3>Account</h3>
+            <p class="panel-desc">Your company name and contact email appear on reports and the app header.</p>
+            <div class="panel-body">
+              <div class="grid-2">
+                <div class="field">
+                  <label>Company name</label>
+                  <input type="text" id="settings-company" value="" />
+                </div>
+                <div class="field">
+                  <label>Contact email</label>
+                  <input type="email" value="ops@acmelogistics.com" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- API key -->
+          <div class="panel">
+            <h3>ShipsGo API key</h3>
+            <p class="panel-desc">Stored securely in Windows Credential Manager — never written to plain text.</p>
+            <div class="panel-body">
+              <div class="field">
+                <label>API key</label>
+                <div class="row">
+                  <input type="password" id="settings-token" value="" placeholder="Enter your ShipsGo API key" style="flex:1" />
+                  <input type="text" id="settings-token-visible" value="" placeholder="Enter your ShipsGo API key" style="flex:1; display:none" />
+                  <button class="btn" type="button" id="btn-token-show">Show</button>
+                  <button class="btn btn-primary" type="button" id="btn-token-test">Test</button>
+                </div>
+                <div class="hint">Find your key at <a href="#">shipsgo.com → Dashboard → Integrations → ShipsGo API</a></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Linked spreadsheet -->
+          <div class="panel">
+            <h3>Linked spreadsheet</h3>
+            <p class="panel-desc">Container data is read from and written to this Excel workbook on every refresh.</p>
+            <div class="panel-body">
+              <div class="spreadsheet-card" style="box-shadow:none;border-color:var(--border)">
+                <div class="xls-icon">XLSX</div>
+                <div class="meta">
+                  <div class="label">Current file</div>
+                  <div class="path" id="excel-current-path">No file linked</div>
+                </div>
+                <div class="actions">
+                  <button class="btn btn-sm" id="btn-excel-open">Open in Excel</button>
+                  <button class="btn btn-sm" id="btn-excel-browse">Change…</button>
+                </div>
+              </div>
+              <div class="row">
+                <button class="btn" id="btn-excel-create">Create template</button>
+                <span class="hint">Generates a blank workbook with a "ContainerTracking" Excel Table.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Appearance -->
+          <div class="panel">
+            <h3>Appearance</h3>
+            <div class="panel-body">
+              <div class="setting-row">
+                <div class="meta"><strong>Dark mode</strong><span>Use a darker palette in low-light environments.</span></div>
+                <label class="switch"><input type="checkbox" id="dark-toggle-settings" /><span class="switch-track"></span></label>
+              </div>
+            </div>
+          </div>
+
+          <!-- About -->
+          <div class="panel">
+            <h3>About</h3>
+            <div class="panel-body">
+              <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 18px;font-size:12px;">
+                <span class="muted">Version</span><span>Container Tracker v1.1.1 — up to date</span>
+                <span class="muted">Data folder</span><span><a href="#">%APPDATA%\ContainerTracker</a></span>
+                <span class="muted">Source</span><span><a href="#">github.com/m-mcohen/container-tracker</a></span>
+                <span class="muted">Support</span><span>michael@example.com</span>
+                <span class="muted">Powered by</span><span>ShipsGo API</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Archive single -->
-    <div id="modal-archive" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-archive-title">
-      <div class="modal__panel">
-        <div class="modal__hd">
-          <h2 id="modal-archive-title">Archive container</h2>
-          <button class="iconbtn" type="button" data-close-modal aria-label="Close">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-          </button>
-        </div>
-        <div class="modal__body">
-          <p style="margin:0;color:var(--ink-2);font-size:12.5px;line-height:1.5">
-            Archive <strong class="cn" id="archive-cn"></strong>? The row stays in your workbook but stops polling for ETA updates.
-          </p>
-        </div>
-        <div class="modal__ft">
-          <button class="btn btn--ghost btn--sm" type="button" data-close-modal>Cancel</button>
-          <button id="btn-archive-confirm" class="btn btn--danger btn--sm" type="button">Archive</button>
-        </div>
-      </div>
-    </div>
+  </main>
 
-    <!-- Bulk archive -->
-    <div id="modal-bulk-archive" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-bulk-archive-title">
-      <div class="modal__panel">
-        <div class="modal__hd">
-          <h2 id="modal-bulk-archive-title">Archive selected</h2>
-          <button class="iconbtn" type="button" data-close-modal aria-label="Close">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-          </button>
-        </div>
-        <div class="modal__body">
-          <p style="margin:0;color:var(--ink-2);font-size:12.5px;line-height:1.5">
-            Archive <strong id="bulk-archive-count">0</strong> containers? They stop polling but stay in your workbook.
-          </p>
-        </div>
-        <div class="modal__ft">
-          <button class="btn btn--ghost btn--sm" type="button" data-close-modal>Cancel</button>
-          <button id="btn-bulk-archive-confirm" class="btn btn--danger btn--sm" type="button">Archive all</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Register unmatched -->
-    <div id="modal-register-unmatched" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-register-title">
-      <div class="modal__panel">
-        <div class="modal__hd">
-          <h2 id="modal-register-title">Register containers</h2>
-          <button class="iconbtn" type="button" data-close-modal aria-label="Close">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-          </button>
-        </div>
-        <p class="modal__intro">
-          Pick a carrier for each. We'll start polling ETAs on the next refresh.
-          <br><span style="color:var(--ink-3)">~<span id="register-cost">0</span> API calls per refresh.</span>
-        </p>
-        <div class="modal__body">
-          <div id="register-unmatched-list" class="register-list"></div>
-          <div id="register-error" class="modal__error" hidden></div>
-        </div>
-        <div class="modal__ft">
-          <button class="btn btn--ghost btn--sm" type="button" data-close-modal>Cancel</button>
-          <button id="btn-register-submit" class="btn btn--primary btn--sm" type="button">Register all</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Row context menu -->
-    <div id="row-menu" hidden>
-      <button class="row-menu__item" type="button" data-action="copy-cn">Copy container number</button>
-      <button class="row-menu__item" type="button" data-action="refresh">Refresh this container</button>
-      <hr/>
-      <button class="row-menu__item is-danger" type="button" data-action="archive">Archive…</button>
-    </div>
-
-    <!-- Toast container -->
-    <div id="toast-container"></div>
+  <!-- ─── Row action menu (positioned via JS next to the … button) ─── -->
+  <div class="row-menu" id="row-menu" hidden role="menu">
+    <button type="button" class="row-menu-item" data-action="archive" role="menuitem">Archive</button>
   </div>
 
-  <script src="app.js"></script>
+  <!-- ─── Modal: Confirm bulk archive ─── -->
+  <div class="modal-backdrop" id="modal-bulk-archive">
+    <div class="modal" role="dialog" aria-labelledby="modal-bulk-archive-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-bulk-archive-title">Archive containers?</div>
+      </div>
+      <div class="modal-body">
+        <div class="callout">
+          <strong id="bulk-archive-count">0</strong> containers will be removed from your Excel file. You can find archived containers in the Archived view.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary" id="btn-bulk-archive-confirm">Archive</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Confirm archive ─── -->
+  <div class="modal-backdrop" id="modal-archive">
+    <div class="modal" role="dialog" aria-labelledby="modal-archive-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-archive-title">Archive this container?</div>
+      </div>
+      <div class="modal-body">
+        <div class="callout">
+          <strong style="font-family:var(--font-mono)" id="archive-cn">CN</strong> will be removed from your Excel file. You can find archived containers in the Archived view.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary" id="btn-archive-confirm">Archive</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Add container ─── -->
+  <div class="modal-backdrop" id="modal-add">
+    <div class="modal" role="dialog" aria-labelledby="modal-add-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-add-title">Track a new container</div>
+        <div class="modal-sub">1 ShipsGo credit (~$2 USD) is consumed per new shipment. Refreshes are free.</div>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="f-cn">Container number</label>
+          <input id="f-cn" type="text" value="MSKU1234567" />
+          <div class="hint">11 characters: 4-letter SCAC + 7 digits, e.g. <span style="font-family:var(--font-mono)">MSKU1234567</span></div>
+        </div>
+        <div class="field">
+          <label for="f-carrier">Carrier</label>
+          <select id="f-carrier">
+            <option value="" selected>Select carrier (optional)</option>
+            <option>MAERSK LINE</option><option>MSC</option><option>CMA CGM</option>
+            <option>HAPAG LLOYD</option><option>COSCO</option><option>EVERGREEN</option>
+            <option>ONE</option><option>YANG MING</option><option>ZIM</option>
+            <option>HMM</option><option>OOCL</option><option>PIL</option>
+          </select>
+        </div>
+        <div class="callout warning">
+          <strong>Heads up:</strong> if this container is already tracked on your ShipsGo account, no credit will be charged.
+        </div>
+        <div class="field-error" id="add-error" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary" id="btn-add-submit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add &amp; track
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Register unmatched containers (Step 6.5) ─── -->
+  <div class="modal-backdrop" id="modal-register-unmatched">
+    <div class="modal" role="dialog" aria-labelledby="modal-register-title">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-register-title">Register containers with ShipsGo</div>
+        <div class="modal-sub"><span id="register-cost">0</span> credits will be used (~$2 USD each). Already-tracked containers are free.</div>
+      </div>
+      <div class="modal-body">
+        <div id="register-unmatched-list" class="register-list"></div>
+        <div class="callout warning" style="margin-top:14px;">
+          Pick a carrier for each container. Refreshes are free; only the initial register call uses credits.
+        </div>
+        <div class="field-error" id="register-error" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close-modal>Cancel</button>
+        <button class="btn btn-primary" id="btn-register-submit">Register</button>
+      </div>
+    </div>
+  </div>
+
+
+</div>
+
+<div id="toast-container" aria-live="polite"></div>
+
+
+<script src="app.js"></script>
 </body>
 </html>
