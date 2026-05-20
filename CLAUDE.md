@@ -88,3 +88,17 @@ If you change the startup sequence, preserve this ordering.
 ### Storage: keyring, not config.json
 
 The ShipsGo token must never be written to `config.json` or any plain-text file. `set_api_token`/`get_api_token` are the only correct accessors. `migrate_token_from_config` exists *because* an early build violated this; treat any reintroduction as a regression.
+
+## Security: outstanding action (flagged 2026-05-20)
+
+**Rotate `SHIPSGO_API_KEY`.** During a repo-sync security pass, a `.env` containing a
+live `SHIPSGO_API_KEY` (used by the CLI variant `container_tracker.py`) was found in a
+OneDrive-synced folder — unencrypted and cross-device-synced. It was relocated to
+`C:\Users\emine\.secrets\container-tracker\.env`. Treat the old key as **exposed**.
+
+Steps:
+1. Generate a new key in the ShipsGo dashboard and revoke the old one.
+2. Update the relocated `.env` (CLI path) with the new key.
+3. Update the GUI keyring entry `ContainerTracker_shipsgo_api` (Windows Credential Manager).
+4. Never store the key in any cloud-synced path again — the GUI's keyring storage is the
+   correct pattern; the CLI's `.env` must live outside synced folders.
