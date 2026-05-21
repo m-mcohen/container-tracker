@@ -17,10 +17,13 @@ build.bat
 iscc installer.iss
 :: → dist\installer\ContainerTracker_Setup_v<version>.exe
 
-:: Run the GUI from source
+:: Run the app from source (pywebview desktop window -- the shipped product)
+python -m container_tracker
+
+:: Legacy tkinter GUI (reference only; not built, not shipped)
 python container_tracker_gui.py
 
-:: CLI variant (separate codepath, different storage layout — see below)
+:: Legacy CLI variant (separate codepath, different storage layout -- see below)
 python container_tracker.py --all              # register from containers.json + refresh + export
 python container_tracker.py --add MSKU1234567 MAERSK
 python container_tracker.py --refresh
@@ -33,22 +36,32 @@ There is no test runner wired up; `tests/` exists but is empty (only `tests/fixt
 
 Three things must move together for the in-app update banner to work:
 
-1. `__version__` in [container_tracker_gui.py](container_tracker_gui.py:6)
+1. `__version__` in [container_tracker/core/constants.py](container_tracker/core/constants.py:3)
 2. `AppVersion` in [installer.iss](installer.iss:3)
-3. A GitHub Release on `GITHUB_REPO` ([container_tracker_gui.py:47](container_tracker_gui.py:47), currently `m-mcohen/container-tracker`) whose `tag_name` parses as a newer version (the `v` prefix is stripped). The app polls `releases/latest` on launch and shows a clickable banner if a newer tag exists.
+3. A GitHub Release whose `tag_name` parses as newer than `__version__` (the `v` prefix is stripped). The update check lives in [container_tracker/core/updates.py](container_tracker/core/updates.py) (`check_for_update_async`) and polls `releases/latest` for `GITHUB_REPO` (`m-mcohen/container-tracker`, defined in `core/constants.py`), showing a clickable banner if a newer tag exists.
 
 ## Architecture
 
-**Two parallel entry points share concepts but not code.** They are intentionally separate — do not refactor one into the other without checking both.
+**Three codepaths live in this repo; only one is shipped.** They are intentionally separate -- do not refactor one into another without checking all.
 
-| | `container_tracker.py` (CLI) | `container_tracker_gui.py` (GUI, the shipped product) |
-|---|---|---|
-| Config / token | `SHIPSGO_API_KEY` env var (or `.env`) | Windows Credential Manager via `keyring` (service = `ContainerTracker_shipsgo_api`) |
-| Data dir | CWD (next to script) | `%APPDATA%\ContainerTracker\` (`get_data_dir()`) |
-| State files | `containers.json`, `tracking_data.json`, `tracker.log`, `container_tracking_report.xlsx` | `config.json`, `tracking_data.json`, `tracker.log` + a user-chosen Excel workbook |
-| UI | argparse | CustomTkinter (falls back to plain Tk if `customtkinter` missing) |
+| | pywebview app (**shipped**) | `container_tracker_gui.py` (legacy) | `container_tracker.py` (legacy CLI) |
+|---|---|---|---|
+| Entry | `python -m container_tracker` -> `__main__.py` -> `app.py` | `python container_tracker_gui.py` | `python container_tracker.py ...` |
+| UI | HTML/CSS/JS in `container_tracker/web/`, rendered in a pywebview window; `bridge.py` is the Python<->JS API | tkinter / CustomTkinter | argparse |
+| Config / token | `keyring` (service = `ContainerTracker_shipsgo_api`) | same keyring service | `SHIPSGO_API_KEY` env var (or `.env`) |
+| Data dir | `%APPDATA%\ContainerTracker\` (`core/config.py`) | `%APPDATA%\ContainerTracker\` | CWD (next to script) |
+| Status | built + shipped (`build.bat` / `ContainerTracker.spec` bundle `__main__.py`) | reference only -- not built, not imported | reference only -- separate data layout |
 
-The two empty packages `container_tracker/core/` and `container_tracker/ui/` are vestigial scaffolding — all real logic lives in the two top-level `.py` files.
+The shipped app's logic lives in the **`container_tracker/` package** (not the top-level `.py` files):
+
+- `app.py` -- creates the pywebview window (1280x820), runs startup migrations, wires the bridge
+- `bridge.py` -- the `js_api` object exposed to JS as `window.pywebview.api`
+- `web/` -- `index.html` (structure), `styles.css` (visual styling), `app.js` (UI behavior)
+- `core/` -- `api.py` (ShipsGo HTTP client), `status.py` (response -> flat-record parser), `excel.py` (Excel read/write/template), `config.py` (data dir + config + migrations), `credentials.py` (keyring token storage), `constants.py` (version, `GITHUB_REPO`, carrier maps), `updates.py` (release-check banner), `util.py`
+
+There is **no** `container_tracker/ui/` package, and `core/` is **not** empty. (An earlier version of this doc called `core/`/`ui/` "empty vestigial scaffolding" -- that predated the tkinter -> pywebview rewrite.)
+
+**[`DEVNOTES.md`](DEVNOTES.md) is the authoritative reference for the shipped pywebview app** (startup sequence, spot-edit index, file-by-file breakdown). The four subsections immediately below (Data model, GUI <-> Excel sync, Migrations, First-run/window lifecycle) document the **legacy tkinter GUI**; the domain concepts (the ShipsGo parser, the Excel-sync rules) carry over to `core/`, but the specifics describe the old GUI.
 
 ### Data model
 
@@ -88,3 +101,17 @@ If you change the startup sequence, preserve this ordering.
 ### Storage: keyring, not config.json
 
 The ShipsGo token must never be written to `config.json` or any plain-text file. `set_api_token`/`get_api_token` are the only correct accessors. `migrate_token_from_config` exists *because* an early build violated this; treat any reintroduction as a regression.
+
+## Security: outstanding action (flagged 2026-05-20)
+
+**Rotate `SHIPSGO_API_KEY`.** During a repo-sync security pass, a `.env` containing a
+live `SHIPSGO_API_KEY` (used by the CLI variant `container_tracker.py`) was found in a
+OneDrive-synced folder — unencrypted and cross-device-synced. It was relocated to
+`C:\Users\emine\.secrets\container-tracker\.env`. Treat the old key as **exposed**.
+
+Steps:
+1. Generate a new key in the ShipsGo dashboard and revoke the old one.
+2. Update the relocated `.env` (CLI path) with the new key.
+3. Update the GUI keyring entry `ContainerTracker_shipsgo_api` (Windows Credential Manager).
+4. Never store the key in any cloud-synced path again — the GUI's keyring storage is the
+   correct pattern; the CLI's `.env` must live outside synced folders.
