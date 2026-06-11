@@ -82,7 +82,9 @@ if ($LASTEXITCODE -ne 0) { Fail "Tests failed - release aborted. Version files a
 Write-Host "[2/5] Tests passed" -ForegroundColor Green
 
 # ---- Build exe + version.iss ------------------------------------------------
-cmd /c build.bat
+# Explicit .\ prefix: environments with NoDefaultCurrentDirectoryInExePath
+# set won't resolve bare "build.bat" from the current directory.
+cmd /c "cd /d ""$repoRoot"" && .\build.bat"
 if ($LASTEXITCODE -ne 0) { Fail "build.bat failed" }
 Write-Host "[3/5] dist\ContainerTracker.exe built" -ForegroundColor Green
 
