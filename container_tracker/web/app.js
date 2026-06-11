@@ -59,6 +59,40 @@
   function showError(message) { _showToast(message, "error"); }
   function showInfo(message)  { _showToast(message, "info"); }
 
+  /* ─────────────────────────────────────────────────────────────────────
+   * Activity log. logActivity(msg, cls) prepends a timestamped entry to
+   * #activity-body and caps the list at 50 entries. cls is optional —
+   * "ok" for success (green), "err" for failures (red); omit for neutral.
+   * Uses DOM construction (no innerHTML interpolation) so msg is always
+   * treated as text, not markup.
+   * ──────────────────────────────────────────────────────────────────── */
+  function logActivity(msg, cls) {
+    const body = document.getElementById("activity-body");
+    if (!body) return;
+    const now = new Date();
+    let h = now.getHours(), m = now.getMinutes();
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    const ts = `[${h}:${String(m).padStart(2, "0")} ${ampm}]`;
+    const wrap = document.createElement("div");
+    const tsSpan = document.createElement("span");
+    tsSpan.className = "ts";
+    tsSpan.textContent = ts;
+    wrap.appendChild(tsSpan);
+    wrap.appendChild(document.createTextNode(" "));
+    if (cls) {
+      const msgSpan = document.createElement("span");
+      msgSpan.className = cls;
+      msgSpan.textContent = msg;
+      wrap.appendChild(msgSpan);
+    } else {
+      wrap.appendChild(document.createTextNode(msg));
+    }
+    body.insertBefore(wrap, body.firstChild);
+    // Cap at 50 entries — remove oldest (last child) until within limit.
+    while (body.children.length > 50) body.removeChild(body.lastChild);
+  }
+
   /* HTML-escape for record fields interpolated into innerHTML. Container
    * numbers, carriers, vessels etc. come from the user's Excel file and
    * the ShipsGo API — never trust them as markup. Safe in attribute
@@ -305,6 +339,29 @@
 
     document.getElementById("row-count").textContent = filtered.length;
 
+    // Empty-state messaging — shown inside the table card when there is
+    // nothing to display.
+    const emptyEl = document.getElementById("empty-state");
+    const emptyTitle = document.getElementById("empty-state-title");
+    const emptySub   = document.getElementById("empty-state-sub");
+    if (emptyEl) {
+      const liveRows = ROWS.filter(r => !r.archived);
+      const hasQuery = !!(document.getElementById("search").value || "").trim();
+      if (liveRows.length === 0 && !hasQuery && activeFilter !== "archived") {
+        // No containers at all yet.
+        if (emptyTitle) emptyTitle.textContent = "No containers yet";
+        if (emptySub)   emptySub.textContent   = "Add a container or link your Excel file to start tracking.";
+        emptyEl.hidden = false;
+      } else if (filtered.length === 0 && ROWS.length > 0) {
+        // Search / filter returned nothing.
+        if (emptyTitle) emptyTitle.textContent = "No matches";
+        if (emptySub)   emptySub.textContent   = "Try a different search or filter.";
+        emptyEl.hidden = false;
+      } else {
+        emptyEl.hidden = true;
+      }
+    }
+
     // Drop SELECTED entries that no longer exist in ROWS (refreshed
     // away). Filter changes clear SELECTED separately so archived
     // selections don't bleed into non-archived views.
@@ -353,7 +410,18 @@
       console.warn('[bridge] check_for_update failed', e);
       return;
     }
-    if (!result || !result.available) return;
+    const aboutVerEl = document.getElementById("about-version");
+    if (!result || !result.available) {
+      // Append "— up to date" once the check completes with no update.
+      if (aboutVerEl && aboutVerEl.textContent && !aboutVerEl.textContent.includes("—")) {
+        aboutVerEl.textContent += " — up to date";
+      }
+      return;
+    }
+    // Update available — update About version text and show banner.
+    if (aboutVerEl && aboutVerEl.textContent && !aboutVerEl.textContent.includes("—")) {
+      aboutVerEl.textContent += " — update available";
+    }
     const banner = document.getElementById("update-banner");
     if (!banner) return;
     banner.querySelector(".banner-text").textContent =
@@ -375,6 +443,8 @@
     const s = await Bridge.get_settings();
     const companyEl = document.getElementById("settings-company");
     if (companyEl) companyEl.value = s.company_name || "";
+    const emailEl = document.getElementById("settings-email");
+    if (emailEl) emailEl.value = s.contact_email || "";
     const tokInput = document.getElementById("settings-token");
     const tokVisible = document.getElementById("settings-token-visible");
     // Always blank — token never crosses the bridge to JS. Placeholder
@@ -403,19 +473,59 @@
         ? `Open ${s.excel_path}`
         : "Link an Excel file in Settings to enable";
     }
+    // About panel — version text (update check will append status later).
+    const aboutVerEl = document.getElementById("about-version");
+    if (aboutVerEl && s.app_version) {
+      aboutVerEl.textContent = `Container Tracker v${s.app_version}`;
+    }
+    // About panel — data folder link. dataset.wired guards against
+    // duplicate listeners when loadSettings() re-runs after a save.
+    const aboutFolderEl = document.getElementById("about-data-folder");
+    if (aboutFolderEl && !aboutFolderEl.dataset.wired) {
+      aboutFolderEl.dataset.wired = "1";
+      aboutFolderEl.addEventListener("click", async (e) => {
+        e.preventDefault();
+        try { await Bridge.open_data_folder(); }
+        catch (err) { console.warn("[bridge] open_data_folder failed", err); }
+      });
+    }
+    // About panel — GitHub link.
+    const aboutGithubEl = document.getElementById("about-github");
+    if (aboutGithubEl && s.github_url && !aboutGithubEl.dataset.wired) {
+      aboutGithubEl.dataset.wired = "1";
+      const ghUrl = s.github_url;
+      aboutGithubEl.addEventListener("click", async (e) => {
+        e.preventDefault();
+        try { await Bridge.open_url(ghUrl); }
+        catch (err) { console.warn("[bridge] open_url failed", err); }
+      });
+    }
+    // First-run callout — show when no API key is present.
+    const firstRunEl = document.getElementById("notice-first-run");
+    if (firstRunEl) firstRunEl.hidden = !!s.api_token_present;
+    // Dark mode — apply saved theme without calling Bridge (avoid redundant write).
+    if (s.theme) {
+      const wantDark = s.theme === "dark";
+      document.documentElement.setAttribute("data-theme", wantDark ? "dark" : "light");
+      const sw = document.getElementById("theme-switch");
+      if (sw) sw.setAttribute("aria-checked", wantDark ? "true" : "false");
+      const cb = document.getElementById("dark-toggle-settings");
+      if (cb) cb.checked = wantDark;
+    }
   }
 
   async function handleSaveSettings() {
     const company = (document.getElementById("settings-company") || {value:""}).value;
     const tokInput = document.getElementById("settings-token") || {value:""};
     const tokVal = tokInput.value;
+    const email = (document.getElementById("settings-email") || {value:""}).value;
     // Pass null when the user didn't type anything — bridge then leaves
     // keyring untouched (deliberate departure from the legacy GUI, which
     // disabled Save on blank token).
     const tokenArg = tokVal && tokVal.trim() ? tokVal : null;
     let result;
     try {
-      result = await Bridge.save_settings(company, tokenArg);
+      result = await Bridge.save_settings(company, tokenArg, email);
     } catch (e) {
       showError(`Save failed: ${(e && e.message) || e}`);
       return;
@@ -469,6 +579,7 @@
     } catch (e) {
       errEl.textContent = `Add failed: ${(e && e.message) || e}`;
       errEl.hidden = false;
+      logActivity(`Failed to add ${cn}: ${(e && e.message) || e}`, "err");
       return;
     }
 
@@ -477,12 +588,14 @@
         // Out-of-credits is global — close modal, show toast.
         app.classList.remove("modal-add-open");
         showError("ShipsGo: not enough credits to add this container.");
+        logActivity(`Failed to add ${cn}: not enough credits`, "err");
       } else if (result.error === "already_exists_local") {
         errEl.textContent = "Container is already tracked.";
         errEl.hidden = false;
       } else {
         errEl.textContent = result.error || "Failed to add container.";
         errEl.hidden = false;
+        logActivity(`Failed to add ${cn}: ${result.error || "unknown"}`, "err");
       }
       return;
     }
@@ -492,6 +605,9 @@
     resetAddModal();
     if (result.was_existing) {
       showInfo("Already on ShipsGo — added to your dashboard.");
+      logActivity(`Added ${cn} (already on ShipsGo)`, "ok");
+    } else {
+      logActivity(`Added ${cn}`, "ok");
     }
     if (result.excel_write_failed) {
       showExcelWriteFailedBanner();
@@ -608,6 +724,8 @@
     if (sw) sw.setAttribute("aria-checked", dark ? "true" : "false");
     const cb = document.getElementById("dark-toggle-settings");
     if (cb) cb.checked = !!dark;
+    // Persist via bridge — fire-and-forget; failure is non-fatal.
+    Bridge.set_theme(dark).catch(err => console.warn("[bridge] set_theme failed", err));
   }
   document.getElementById("theme-switch").addEventListener("click", () => {
     const isDark = document.documentElement.getAttribute("data-theme") === "dark";
@@ -636,12 +754,21 @@
       const result = await Bridge.refresh_all();
       if (result.error) {
         showError(`Refresh failed: ${result.error}`);
+        logActivity(`Refresh failed: ${result.error}`, "err");
       } else {
         ROWS = await Bridge.list_containers();
         render();
         markRefreshed();
+        const updated  = result.updated  || 0;
+        const unmatched = result.unmatched || [];
+        const excelRows = result.excel_rows_updated != null ? result.excel_rows_updated : (result.excel_write_failed ? 0 : updated);
+        logActivity(
+          `Refresh complete — ${updated} updated, ${unmatched.length} unmatched, ${excelRows} Excel row${excelRows === 1 ? "" : "s"} updated`,
+          "ok"
+        );
         if (result.failed && result.failed.length > 0) {
           showError(`Refreshed ${result.updated} containers; ${result.failed.length} failed. See console.`);
+          logActivity(`${result.failed.length} container${result.failed.length === 1 ? "" : "s"} failed to refresh`, "err");
           console.warn("[refresh] failed:", result.failed);
         }
         // Step 6.5: Excel-related result fields. Read failures don't abort
@@ -660,7 +787,6 @@
         } else {
           hideExcelWriteFailedBanner();
         }
-        const unmatched = result.unmatched || [];
         if (unmatched.length > 0) {
           showUnmatchedBanner(unmatched);
         } else {
@@ -668,6 +794,7 @@
         }
       }
     } catch (e) {
+      logActivity(`Refresh failed: ${(e && e.message) || e}`, "err");
       showError(`Refresh failed: ${(e && e.message) || e}`);
     } finally {
       btn.disabled = false;
@@ -785,11 +912,14 @@
       const credits = result.failed.find(f => f.error === "NOT_ENOUGH_CREDITS");
       if (credits) {
         showError("ShipsGo: not enough credits — registration stopped.");
+        logActivity("Registration stopped: not enough credits", "err");
       } else {
         showError(`Registered ${result.registered}; ${result.failed.length} failed. See console.`);
+        logActivity(`Registered ${result.registered}, ${result.failed.length} failed`, "err");
         console.warn("[register_unmatched] failed:", result.failed);
       }
     } else if (result.registered > 0) {
+      logActivity(`Registered ${result.registered} container${result.registered === 1 ? "" : "s"}`, "ok");
       showInfo(`Registered ${result.registered} container${result.registered === 1 ? "" : "s"}. Refreshing…`);
     }
     // Pull the fresh shipment data for newly-registered CNs.
@@ -845,6 +975,8 @@
       return;
     }
     await loadSettings();
+    const fname = pick.path.split(/[/\\]/).pop();
+    logActivity(`Linked ${fname}`, "ok");
     showInfo("Excel file linked.");
   }
 
@@ -872,6 +1004,8 @@
       return;
     }
     await loadSettings();
+    const tname = pick.path.split(/[/\\]/).pop();
+    logActivity(`Created template ${tname}`, "ok");
     showInfo("Template created and linked.");
   }
 
@@ -949,6 +1083,7 @@
     SELECTED.delete(cn);
     render();
     if (result.excel_write_failed) showExcelWriteFailedBanner();
+    logActivity(`Restored ${cn}`, "ok");
     showInfo("Container restored.");
   }
 
@@ -1009,6 +1144,7 @@
     if (result.excel_write_failed) {
       showExcelWriteFailedBanner();
     }
+    logActivity(`Archived ${cn}`, "ok");
     showInfo("Container archived.");
   }
   const archiveConfirmBtn = document.getElementById("btn-archive-confirm");
@@ -1123,10 +1259,12 @@
     if (excelFailed) showExcelWriteFailedBanner();
     if (firstError && archived === 0) {
       showError(`Archive failed: ${firstError}`);
+      logActivity(`Bulk archive failed: ${firstError}`, "err");
     } else {
       if (firstError) {
         console.warn("[bulk-archive] some failures:", firstError);
       }
+      logActivity(`Archived ${archived} container${archived === 1 ? "" : "s"}`, "ok");
       showInfo(`${archived} container${archived === 1 ? "" : "s"} archived.`);
     }
   }
@@ -1163,8 +1301,10 @@
     if (excelFailed) showExcelWriteFailedBanner();
     if (firstError && restored === 0) {
       showError(`Restore failed: ${firstError}`);
+      logActivity(`Bulk restore failed: ${firstError}`, "err");
     } else {
       if (firstError) console.warn("[bulk-restore] some failures:", firstError);
+      logActivity(`Restored ${restored} container${restored === 1 ? "" : "s"}`, "ok");
       showInfo(`${restored} container${restored === 1 ? "" : "s"} restored.`);
     }
   }
