@@ -126,12 +126,17 @@ def test_get_settings_reads_config(isolated_data_dir, mock_keyring):
     mock_keyring.store[(credentials.KEYRING_SERVICE,
                         credentials.KEYRING_USER)] = "real-token"
 
-    assert Bridge().get_settings() == {
-        "company_name": "ACME",
-        "api_token_present": True,
-        "theme": "light",
-        "excel_path": "",
-    }
+    s = Bridge().get_settings()
+    assert s["company_name"] == "ACME"
+    assert s["contact_email"] == ""
+    assert s["api_token_present"] is True
+    assert s["theme"] == "light"
+    assert s["excel_path"] == ""
+    # About-panel fields: live version string plus stable local paths/URLs.
+    from container_tracker.core.constants import GITHUB_REPO, __version__
+    assert s["app_version"] == __version__
+    assert s["data_dir"]  # non-empty path
+    assert s["github_url"] == f"https://github.com/{GITHUB_REPO}"
 
 
 def test_get_settings_no_token(isolated_data_dir, mock_keyring):
