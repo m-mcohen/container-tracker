@@ -28,7 +28,10 @@ function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 # ---- Preflight ------------------------------------------------------------
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail "Version must be X.Y.Z (got '$Version')" }
 
-py -3.12 --version *> $null
+# Native stderr is redirected inside cmd, not PowerShell: PS 5.1 turns a
+# redirected native stderr line into a terminating NativeCommandError when
+# $ErrorActionPreference is Stop.
+cmd /c "py -3.12 --version >nul 2>&1"
 if ($LASTEXITCODE -ne 0) { Fail "Python 3.12 not found. Install: winget install Python.Python.3.12" }
 
 $isccCmd = Get-Command iscc -ErrorAction SilentlyContinue
@@ -43,12 +46,12 @@ else {
 }
 
 if (-not $BuildOnly) {
-    gh auth status *> $null
+    cmd /c "gh auth status >nul 2>&1"
     if ($LASTEXITCODE -ne 0) { Fail "gh CLI not authenticated. Run: gh auth login" }
     $dirty = git status --porcelain
     if ($dirty) { Fail "Working tree is not clean. Commit or stash first.`n$dirty" }
-    git rev-parse "v$Version" *> $null
-    if ($LASTEXITCODE -eq 0) { Fail "Tag v$Version already exists." }
+    # git tag --list exits 0 either way and never writes stderr.
+    if (git tag --list "v$Version") { Fail "Tag v$Version already exists." }
 }
 
 # ---- Bump version (constants.py is the source of truth) --------------------
