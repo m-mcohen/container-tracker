@@ -55,6 +55,16 @@
   function showError(message) { _showToast(message, "error"); }
   function showInfo(message)  { _showToast(message, "info"); }
 
+  /* HTML-escape for record fields interpolated into innerHTML. Container
+   * numbers, carriers, vessels etc. come from the user's Excel file and
+   * the ShipsGo API — never trust them as markup. Safe in attribute
+   * context too (escapes both quote styles). */
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, ch => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+    ));
+  }
+
   /* ─────────────────────────────────────────────────────────────────────
    * Excel-related banners (Step 6.5). Notice elements live in the
    * dashboard's notification stack; helpers toggle the [hidden] attr
@@ -259,30 +269,31 @@
         : `<div class="transit-bar"><div class="transit-fill ${cls}" style="width:${r.pct}%;"></div></div><div class="transit-pct">${r.pct}%</div>`;
       const routeHtml = !r.pol
         ? `<span class="muted">—</span>`
-        : `<span class="route"><span>${r.pol}</span><span class="arrow">→</span><span>${r.pod}</span></span>`;
+        : `<span class="route"><span>${esc(r.pol)}</span><span class="arrow">→</span><span>${esc(r.pod)}</span></span>`;
       const statusBadge = isArchived
         ? `<span class="chip-status archived"><span class="dot"></span>Archived</span>`
-        : `<span class="chip-status ${cls}"><span class="dot"></span>${statusLabel(r)}</span>`;
+        : `<span class="chip-status ${cls}"><span class="dot"></span>${esc(statusLabel(r))}</span>`;
+      const cn = esc(r.cn);
       const actionsCell = isArchived
-        ? `<button class="row-action-restore" type="button" data-action="restore" data-cn="${r.cn}" aria-label="Restore ${r.cn}">Restore</button>`
+        ? `<button class="row-action-restore" type="button" data-action="restore" data-cn="${cn}" aria-label="Restore ${cn}">Restore</button>`
         : `<div class="row-actions">
-              <button class="row-action" data-action="refresh" data-cn="${r.cn}" aria-label="Refresh ${r.cn}" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
-              <button class="row-action" data-action="more" data-cn="${r.cn}" aria-label="More actions for ${r.cn}" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
+              <button class="row-action" data-action="refresh" data-cn="${cn}" aria-label="Refresh ${cn}" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+              <button class="row-action" data-action="more" data-cn="${cn}" aria-label="More actions for ${cn}" title="More"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg></button>
             </div>`;
       const checkAttr = SELECTED.has(r.cn) ? " checked" : "";
       // Archived rows are now selectable in the Archived view so they
       // can drive bulk-restore — no per-row disabled.
       return `
-        <tr data-cn="${r.cn}"${isArchived ? ' class="is-archived"' : ''}>
-          <td><input type="checkbox" class="row-select" data-cn="${r.cn}" aria-label="Select ${r.cn}" onclick="event.stopPropagation()"${checkAttr} /></td>
-          <td><span class="cn">${r.cn}</span></td>
-          <td>${r.carrier || '<span class="muted">—</span>'}</td>
+        <tr data-cn="${cn}"${isArchived ? ' class="is-archived"' : ''}>
+          <td><input type="checkbox" class="row-select" data-cn="${cn}" aria-label="Select ${cn}" onclick="event.stopPropagation()"${checkAttr} /></td>
+          <td><span class="cn">${cn}</span></td>
+          <td>${r.carrier ? esc(r.carrier) : '<span class="muted">—</span>'}</td>
           <td>${statusBadge}</td>
-          <td>${r.orig || '<span class="muted">—</span>'}</td>
-          <td>${r.eta || '<span class="muted">—</span>'}</td>
-          <td><span class="${delayCls}">${r.delay || '—'}</span></td>
+          <td>${r.orig ? esc(r.orig) : '<span class="muted">—</span>'}</td>
+          <td>${r.eta ? esc(r.eta) : '<span class="muted">—</span>'}</td>
+          <td><span class="${delayCls}">${esc(r.delay || '—')}</span></td>
           <td>${routeHtml}</td>
-          <td>${r.vessel || '<span class="muted">—</span>'}</td>
+          <td>${r.vessel ? esc(r.vessel) : '<span class="muted">—</span>'}</td>
           <td><div class="transit">${pctHtml}</div></td>
           <td>${actionsCell}</td>
         </tr>`;
@@ -679,12 +690,12 @@
          "EVERGREEN", "ONE", "YANG MING", "ZIM", "HMM", "OOCL", "PIL", "OTHER"];
     list.innerHTML = cns.map(cn => {
       const opts = ['<option value="">Select carrier…</option>']
-        .concat(carriers.map(c => `<option value="${c}">${c}</option>`))
+        .concat(carriers.map(c => `<option value="${esc(c)}">${esc(c)}</option>`))
         .join("");
       return `
         <div class="register-row">
-          <span class="register-cn">${cn}</span>
-          <select class="register-carrier" data-cn="${cn}">${opts}</select>
+          <span class="register-cn">${esc(cn)}</span>
+          <select class="register-carrier" data-cn="${esc(cn)}">${opts}</select>
         </div>`;
     }).join("");
     const cost = document.getElementById("register-cost");

@@ -1,4 +1,4 @@
-"""Bridge layer between the pywebview window's JS and the Python core.
+﻿"""Bridge layer between the pywebview window's JS and the Python core.
 
 Step 5 wires list_containers / get_container to the on-disk tracking DB.
 Refresh from the live ShipsGo API, mutations (add/remove), and
@@ -82,6 +82,17 @@ from container_tracker.core.excel import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_err(e: Exception) -> str:
+    """Compact, user-safe error text for dicts returned to JS.
+
+    requests exceptions can stringify with the full response body embedded
+    (which may echo headers or account details) — keep only the first line
+    and cap the length. Full tracebacks still go to the log, never the UI.
+    """
+    msg = (str(e) or e.__class__.__name__).splitlines()[0]
+    return msg[:197] + "..." if len(msg) > 200 else msg
 
 
 # Match the leading signed integer in delay strings like "+7 days",
@@ -287,7 +298,7 @@ class Bridge:
             return {
                 **base,
                 "duration_ms": int((time.monotonic() - started) * 1000),
-                "error": f"list_shipments failed: {e}",
+                "error": f"list_shipments failed: {_safe_err(e)}",
                 "excel_read_failed": excel_read_failed,
                 "excel_missing": excel_missing,
             }
@@ -325,7 +336,7 @@ class Bridge:
                 updated += 1
             except Exception as e:
                 logger.warning("refresh failed for %s: %s", cn_up, e)
-                failed.append({"cn": cn_up, "error": str(e)})
+                failed.append({"cn": cn_up, "error": _safe_err(e)})
 
         # Single tracking_data.json write at end (legacy line 820).
         ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
@@ -389,7 +400,7 @@ class Bridge:
                         break
             except Exception as e:
                 return {"cn": cn_up, "ok": False,
-                        "error": f"list_shipments failed: {e}"}
+                        "error": f"list_shipments failed: {_safe_err(e)}"}
         if not sid:
             return {"cn": cn_up, "ok": False,
                     "error": "no shipment id (not on ShipsGo)"}
@@ -405,7 +416,7 @@ class Bridge:
             ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
             return {"cn": cn_up, "ok": True, "error": None}
         except Exception as e:
-            return {"cn": cn_up, "ok": False, "error": str(e)}
+            return {"cn": cn_up, "ok": False, "error": _safe_err(e)}
 
     # --- Mutations ---------------------------------------------------------
 
@@ -467,7 +478,7 @@ class Bridge:
             resp = client.create_shipment(container_number=cn_up,
                                           carrier_scac=scac)
         except Exception as e:
-            return {"ok": False, "error": str(e),
+            return {"ok": False, "error": _safe_err(e),
                     "was_existing": False, "container": None,
                     "excel_write_failed": False}
 
@@ -631,7 +642,7 @@ class Bridge:
             return {"ok": True, "error": None}
         except Exception as e:
             logger.exception("save_settings failed")
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": _safe_err(e)}
 
     # --- Excel link management (Step 6.5) ---------------------------------
 
@@ -658,7 +669,7 @@ class Bridge:
             return {"ok": True, "error": None, "path": p}
         except Exception as e:
             logger.exception("set_excel_path failed")
-            return {"ok": False, "error": str(e), "path": path or ""}
+            return {"ok": False, "error": _safe_err(e), "path": path or ""}
 
     def create_excel_template(self, path: str) -> dict:
         """Generate a fresh Container_Tracking template at ``path`` and
@@ -680,7 +691,7 @@ class Bridge:
             return {"ok": True, "error": None, "path": p}
         except Exception as e:
             logger.exception("create_excel_template failed")
-            return {"ok": False, "error": str(e), "path": path or ""}
+            return {"ok": False, "error": _safe_err(e), "path": path or ""}
 
     def open_linked_excel(self) -> dict:
         """Open the currently-linked workbook in Excel. Returns ok=False
@@ -696,7 +707,7 @@ class Bridge:
             return {"ok": True, "error": None}
         except Exception as e:
             logger.warning("open_linked_excel failed: %s", e)
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": _safe_err(e)}
 
     def pick_excel_file(self) -> dict:
         """Show the native Open dialog and return the chosen path. The
@@ -718,7 +729,7 @@ class Bridge:
             return {"path": chosen, "error": None}
         except Exception as e:
             logger.warning("pick_excel_file failed: %s", e)
-            return {"path": None, "error": str(e)}
+            return {"path": None, "error": _safe_err(e)}
 
     def pick_excel_save_path(self) -> dict:
         """Show the native Save-As dialog for a new template."""
@@ -738,7 +749,7 @@ class Bridge:
             return {"path": chosen, "error": None}
         except Exception as e:
             logger.warning("pick_excel_save_path failed: %s", e)
-            return {"path": None, "error": str(e)}
+            return {"path": None, "error": _safe_err(e)}
 
     # --- Unmatched-CN flow (Step 6.5) -------------------------------------
 
@@ -786,7 +797,7 @@ class Bridge:
                 resp = client.create_shipment(container_number=cn_up,
                                               carrier_scac=scac)
             except Exception as e:
-                failures.append({"cn": cn_up, "error": str(e)})
+                failures.append({"cn": cn_up, "error": _safe_err(e)})
                 continue
             if isinstance(resp, dict) and resp.get("error") == "NOT_ENOUGH_CREDITS":
                 failures.append({"cn": cn_up, "error": "NOT_ENOUGH_CREDITS"})
@@ -825,4 +836,4 @@ class Bridge:
             return {"ok": True, "dismissed": existing}
         except Exception as e:
             logger.exception("dismiss_unmatched failed")
-            return {"ok": False, "dismissed": [], "error": str(e)}
+            return {"ok": False, "dismissed": [], "error": _safe_err(e)}
