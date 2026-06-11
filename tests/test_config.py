@@ -51,6 +51,34 @@ class TestMigrateDataFolder:
         assert _migrate_data_folder(tmp_path / "does-not-exist", dst) == 0
 
 
+class TestJsonHelpers:
+    def test_corrupt_json_preserved_as_bak_and_default_returned(self, tmp_path):
+        f = tmp_path / "tracking_data.json"
+        f.write_text('{"MSKU1234567": {"status": "SAIL')  # truncated write
+
+        result = ct_config.load_json(f, {})
+
+        assert result == {}
+        bak = tmp_path / "tracking_data.json.corrupt.bak"
+        assert bak.exists()
+        assert bak.read_text().startswith('{"MSKU1234567"')
+
+    def test_save_json_is_atomic_no_tmp_left_behind(self, tmp_path):
+        f = tmp_path / "config.json"
+        ct_config.save_json(f, {"a": 1})
+        assert json.loads(f.read_text()) == {"a": 1}
+        assert not (tmp_path / "config.json.tmp").exists()
+
+    def test_save_json_overwrites_existing(self, tmp_path):
+        f = tmp_path / "config.json"
+        ct_config.save_json(f, {"a": 1})
+        ct_config.save_json(f, {"b": 2})
+        assert json.loads(f.read_text()) == {"b": 2}
+
+    def test_load_json_missing_file_returns_default(self, tmp_path):
+        assert ct_config.load_json(tmp_path / "nope.json", {"x": 1}) == {"x": 1}
+
+
 class TestMigrateTokenFromConfig:
     def test_strips_shipsgo_api_token_key(self, mock_keyring):
         cfg = {"shipsgo_api_token": "tok-1", "company_name": "Acme"}

@@ -22,6 +22,11 @@ class TestResolveScac:
         assert resolve_scac("XYZA") == "XYZA"
         assert resolve_scac("xyza") == "XYZA"
 
-    def test_unknown_carrier_returns_uppercased_input(self):
-        # Current behavior: longer-than-4 unknowns also get uppercased.
-        assert resolve_scac("Some Random Carrier") == "SOME RANDOM CARRIER"
+    def test_unknown_carrier_maps_to_others(self):
+        # Free-text carrier names must not leak to the API as a fake SCAC.
+        assert resolve_scac("Some Random Carrier") == "OTHERS"
+        assert resolve_scac("My Cousin's Boat") == "OTHERS"
+
+    def test_4_letter_non_alpha_maps_to_others(self):
+        # 4 chars but not letters — not SCAC-shaped.
+        assert resolve_scac("12AB") == "OTHERS"

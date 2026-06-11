@@ -102,16 +102,43 @@ def run_folder_migrations() -> None:
 # ---------------------------------------------------------------------------
 
 def load_json(filepath, default: Any = None):
+    """Load a JSON file, surviving corruption.
+
+    A truncated/garbled file (crash mid-write on an old build, disk error)
+    is preserved as ``<file>.corrupt.bak`` and the default is returned —
+    the app starts with empty state instead of crashing, and the original
+    bytes stay on disk for manual recovery.
+    """
     p = Path(filepath)
     if p.exists():
-        with open(p) as f:
-            return json.load(f)
+        try:
+            with open(p) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            bak = p.with_suffix(p.suffix + ".corrupt.bak")
+            try:
+                shutil.copy2(p, bak)
+                logger.warning(
+                    "%s is corrupt (%s) — preserved a copy at %s and "
+                    "starting with defaults", p.name, e, bak.name,
+                )
+            except Exception:
+                logger.warning(
+                    "%s is corrupt (%s) and the backup copy failed — "
+                    "starting with defaults", p.name, e,
+                )
     return default if default is not None else {}
 
 
 def save_json(filepath, data) -> None:
-    with open(filepath, "w") as f:
+    """Atomic write: serialize to <file>.tmp, then os.replace over the
+    target. A crash mid-write leaves the previous file intact instead of
+    a truncated one."""
+    p = Path(filepath)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    with open(tmp, "w") as f:
         json.dump(data, f, indent=2, default=str)
+    os.replace(tmp, p)
 
 
 def load_config() -> dict:
