@@ -9,7 +9,11 @@
     async list_containers() { return await window.pywebview.api.list_containers(); },
     async get_container(no) { return await window.pywebview.api.get_container(no); },
     async get_settings()    { return await window.pywebview.api.get_settings(); },
-    async save_settings(company_name, api_token) { return await window.pywebview.api.save_settings(company_name, api_token); },
+    async save_settings(company_name, api_token, contact_email) { return await window.pywebview.api.save_settings(company_name, api_token, contact_email); },
+    async set_theme(dark)   { return await window.pywebview.api.set_theme(dark); },
+    async check_for_update() { return await window.pywebview.api.check_for_update(); },
+    async open_url(url)     { return await window.pywebview.api.open_url(url); },
+    async open_data_folder() { return await window.pywebview.api.open_data_folder(); },
     async refresh_all()     { return await window.pywebview.api.refresh_all(); },
     async refresh_one(cn)   { return await window.pywebview.api.refresh_one(cn); },
     async add_container(cn, carrier) { return await window.pywebview.api.add_container(cn, carrier); },
@@ -336,8 +340,35 @@
       console.warn('[bridge] list_carriers failed', e);
     }
     updateLastRefresh();
+    checkForUpdate();
   }
   window.addEventListener('pywebviewready', loadInitialData);
+
+  /* ─── Update banner (GitHub Releases check) ─── */
+  async function checkForUpdate() {
+    let result;
+    try {
+      result = await Bridge.check_for_update();
+    } catch (e) {
+      console.warn('[bridge] check_for_update failed', e);
+      return;
+    }
+    if (!result || !result.available) return;
+    const banner = document.getElementById("update-banner");
+    if (!banner) return;
+    banner.querySelector(".banner-text").textContent =
+      `Version ${result.tag} is available.`;
+    const link = banner.querySelector(".banner-link");
+    link.addEventListener("click", async (e) => {
+      e.preventDefault();
+      try { await Bridge.open_url(result.url); }
+      catch (err) { showError("Couldn't open the download page."); }
+    });
+    banner.querySelector(".dismiss").addEventListener("click", () => {
+      banner.hidden = true;
+    });
+    banner.hidden = false;
+  }
 
   /* ─── Settings load/save ─── */
   async function loadSettings() {

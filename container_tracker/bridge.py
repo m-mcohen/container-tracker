@@ -65,14 +65,16 @@ import logging
 import os
 import re
 import time
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
 from container_tracker.core import config as ct_config
 from container_tracker.core import credentials as ct_credentials
 from container_tracker.core import status as ct_status
+from container_tracker.core import updates as ct_updates
 from container_tracker.core.api import ShipsGoClient, resolve_scac
-from container_tracker.core.constants import CARRIER_NAMES
+from container_tracker.core.constants import CARRIER_NAMES, GITHUB_REPO, __version__
 from container_tracker.core.excel import (
     append_container_row,
     create_template_excel,
@@ -621,19 +623,27 @@ class Bridge:
         cfg = ct_config.load_config()
         return {
             "company_name": cfg.get("company_name", ""),
+            "contact_email": cfg.get("contact_email", "") or "",
             "api_token_present": bool(ct_credentials.get_api_token()),
             "theme": "dark" if cfg.get("dark_mode") else "light",
             "excel_path": cfg.get("excel_path", "") or "",
+            "app_version": __version__,
+            "data_dir": str(ct_config.DATA_DIR),
+            "github_url": f"https://github.com/{GITHUB_REPO}",
         }
 
-    def save_settings(self, company_name: str, api_token=None) -> dict:
-        """Save company name to config.json. Save api_token to keyring iff
-        non-empty (None / empty / whitespace leaves the existing token
-        untouched — the new shell uses a masked placeholder for "token
-        already set" and treats blank as "don't touch")."""
+    def save_settings(self, company_name: str, api_token=None,
+                      contact_email=None) -> dict:
+        """Save company name (and contact email, if given) to config.json.
+        Save api_token to keyring iff non-empty (None / empty / whitespace
+        leaves the existing token untouched — the new shell uses a masked
+        placeholder for "token already set" and treats blank as "don't
+        touch")."""
         try:
             cfg = ct_config.load_config()
             cfg["company_name"] = (company_name or "").strip()
+            if contact_email is not None:
+                cfg["contact_email"] = str(contact_email).strip()
             ct_config.save_config(cfg)
             if api_token:
                 tok = str(api_token).strip()
@@ -642,6 +652,48 @@ class Bridge:
             return {"ok": True, "error": None}
         except Exception as e:
             logger.exception("save_settings failed")
+            return {"ok": False, "error": _safe_err(e)}
+
+    def set_theme(self, dark: bool) -> dict:
+        """Persist the dark-mode preference so it survives restarts."""
+        try:
+            cfg = ct_config.load_config()
+            cfg["dark_mode"] = bool(dark)
+            ct_config.save_config(cfg)
+            return {"ok": True, "error": None}
+        except Exception as e:
+            logger.exception("set_theme failed")
+            return {"ok": False, "error": _safe_err(e)}
+
+    # --- Updates / external links ------------------------------------------
+
+    def check_for_update(self) -> dict:
+        """Synchronous release check; pywebview already calls bridge methods
+        on a worker thread, so blocking on the 5s HTTP timeout is fine.
+        Returns {"available": bool, "tag": str, "url": str}."""
+        return ct_updates.check_for_update()
+
+    def open_url(self, url: str) -> dict:
+        """Open a URL in the system default browser. Restricted to this
+        project's GitHub pages so JS can't be tricked into launching
+        arbitrary targets."""
+        u = (url or "").strip()
+        if not u.startswith(f"https://github.com/{GITHUB_REPO}"):
+            return {"ok": False, "error": "URL not allowed"}
+        try:
+            webbrowser.open(u)
+            return {"ok": True, "error": None}
+        except Exception as e:
+            logger.exception("open_url failed")
+            return {"ok": False, "error": _safe_err(e)}
+
+    def open_data_folder(self) -> dict:
+        """Open %APPDATA%\\ContainerTracker in Explorer (About panel link)."""
+        try:
+            os.startfile(str(ct_config.DATA_DIR))  # noqa: S606 — fixed local path
+            return {"ok": True, "error": None}
+        except Exception as e:
+            logger.exception("open_data_folder failed")
             return {"ok": False, "error": _safe_err(e)}
 
     # --- Excel link management (Step 6.5) ---------------------------------

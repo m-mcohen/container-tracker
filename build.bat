@@ -13,11 +13,11 @@ REM Python version must match requires-python in pyproject.toml.
 py -3.12 --version >nul 2>&1
 if %errorlevel% neq 0 ( echo ERROR: Python 3.12 not found. Install via: winget install Python.Python.3.12 & exit /b 1 )
 
-echo [1/3] Installing dependencies...
-py -3.12 -m pip install requests openpyxl pywebview pythonnet pillow pyinstaller keyring "packaging>=24.2" --quiet
+echo [1/4] Installing dependencies...
+py -3.12 -m pip install -r requirements-build.txt --quiet
 if %errorlevel% neq 0 ( echo ERROR: pip install failed. & exit /b 1 )
 
-echo [2/3] Compiling ContainerTracker.exe...
+echo [2/4] Compiling ContainerTracker.exe...
 py -3.12 -m PyInstaller ^
     --noconfirm ^
     --onefile ^
@@ -34,7 +34,14 @@ py -3.12 -m PyInstaller ^
 
 if %errorlevel% neq 0 ( echo ERROR: PyInstaller build failed. & exit /b 1 )
 
-echo [3/3] Done.
+echo [3/4] Generating version.iss from constants.py...
+REM installer.iss #includes version.iss so the installer version always
+REM matches __version__ (single source of truth). chr(34) avoids nested
+REM double-quote escaping inside the cmd-quoted python -c string.
+py -3.12 -c "from container_tracker.core.constants import __version__ as v; open('version.iss','w').write('#define AppVersion ' + chr(34) + v + chr(34) + chr(10))"
+if %errorlevel% neq 0 ( echo ERROR: version.iss generation failed. & exit /b 1 )
+
+echo [4/4] Done.
 echo.
 echo ============================================
 echo  BUILD COMPLETE
