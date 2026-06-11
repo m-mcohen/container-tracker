@@ -1,4 +1,4 @@
-# tools/release.ps1 — one-command release for Container Tracker.
+﻿# tools/release.ps1 - one-command release for Container Tracker.
 #
 #   .\tools\release.ps1 -Version 1.2.0              # full release
 #   .\tools\release.ps1 -Version 1.2.0 -Prerelease  # marked prerelease on GitHub
@@ -67,7 +67,7 @@ Write-Host "[1/5] Version bumped to $Version (constants.py, pyproject.toml)" -Fo
 
 # ---- Tests ------------------------------------------------------------------
 python -m pytest -q
-if ($LASTEXITCODE -ne 0) { Fail "Tests failed — release aborted. Version files are bumped but uncommitted; revert with: git checkout -- $constantsPath $pyprojectPath" }
+if ($LASTEXITCODE -ne 0) { Fail "Tests failed - release aborted. Version files are bumped but uncommitted; revert with: git checkout -- $constantsPath $pyprojectPath" }
 Write-Host "[2/5] Tests passed" -ForegroundColor Green
 
 # ---- Build exe + version.iss ------------------------------------------------
@@ -103,5 +103,5 @@ if ($Prerelease) { $flags += "--prerelease" }
 gh release create "v$Version" $installer @flags
 if ($LASTEXITCODE -ne 0) { Fail "gh release create failed (tag is pushed; create the release manually or re-run gh)" }
 
-Write-Host "[5/5] Released v$Version — installer attached to the GitHub release." -ForegroundColor Green
+Write-Host "[5/5] Released v$Version - installer attached to the GitHub release." -ForegroundColor Green
 Write-Host "Installed apps will show the update banner on next launch (requires the release to be publicly reachable)."
