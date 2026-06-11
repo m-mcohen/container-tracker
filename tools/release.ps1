@@ -55,16 +55,20 @@ if (-not $BuildOnly) {
 }
 
 # ---- Bump version (constants.py is the source of truth) --------------------
+# BOM-less UTF-8 writes: PS 5.1's Set-Content -Encoding utf8 prepends a BOM,
+# which pytest's TOML parser rejects ("Invalid statement at line 1, column 1").
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+
 $constantsPath = "container_tracker\core\constants.py"
-$constants = Get-Content $constantsPath -Raw -Encoding utf8
+$constants = [System.IO.File]::ReadAllText((Resolve-Path $constantsPath), [System.Text.Encoding]::UTF8)
 if ($constants -notmatch '__version__ = "') { Fail "__version__ not found in $constantsPath" }
 $constants = $constants -replace '__version__ = "[^"]+"', "__version__ = `"$Version`""
-Set-Content $constantsPath $constants -Encoding utf8 -NoNewline
+[System.IO.File]::WriteAllText((Resolve-Path $constantsPath), $constants, $utf8NoBom)
 
 $pyprojectPath = "pyproject.toml"
-$pyproject = Get-Content $pyprojectPath -Raw -Encoding utf8
+$pyproject = [System.IO.File]::ReadAllText((Resolve-Path $pyprojectPath), [System.Text.Encoding]::UTF8)
 $pyproject = $pyproject -replace '(?m)^version = "[^"]+"', "version = `"$Version`""
-Set-Content $pyprojectPath $pyproject -Encoding utf8 -NoNewline
+[System.IO.File]::WriteAllText((Resolve-Path $pyprojectPath), $pyproject, $utf8NoBom)
 
 Write-Host "[1/5] Version bumped to $Version (constants.py, pyproject.toml)" -ForegroundColor Green
 
