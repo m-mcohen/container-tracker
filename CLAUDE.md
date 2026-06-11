@@ -30,15 +30,26 @@ python container_tracker.py --refresh
 python container_tracker.py --carriers
 ```
 
-There is no test runner wired up; `tests/` exists but is empty (only `tests/fixtures/`).
+Tests: `python -m pytest` (configured via `pyproject.toml`; the suite lives in `tests/` with shared fixtures in `tests/conftest.py`).
 
 ## Releasing
 
-Three things must move together for the in-app update banner to work:
+One command does the whole release:
 
-1. `__version__` in [container_tracker/core/constants.py](container_tracker/core/constants.py:3)
-2. `AppVersion` in [installer.iss](installer.iss:3)
-3. A GitHub Release whose `tag_name` parses as newer than `__version__` (the `v` prefix is stripped). The update check lives in [container_tracker/core/updates.py](container_tracker/core/updates.py) (`check_for_update_async`) and polls `releases/latest` for `GITHUB_REPO` (`m-mcohen/container-tracker`, defined in `core/constants.py`), showing a clickable banner if a newer tag exists.
+```powershell
+.\tools\release.ps1 -Version X.Y.Z              # full release
+.\tools\release.ps1 -Version X.Y.Z -BuildOnly   # bump + test + build only, no git/GitHub
+```
+
+It bumps the version, runs pytest (aborting on failure), builds the exe (`build.bat`) and installer (`iscc`), commits, tags `vX.Y.Z`, pushes, and creates the GitHub Release with the installer attached (`gh` CLI must be authenticated).
+
+**The version has a single source of truth: `__version__` in [container_tracker/core/constants.py](container_tracker/core/constants.py:3).** Everything else derives from it:
+
+- `installer.iss` `#include`s a generated `version.iss` (written by `build.bat`, gitignored)
+- `pyproject.toml` is patched in lockstep by `release.ps1`
+- the UI's About panel reads it at runtime via `get_settings()["app_version"]`
+
+The in-app update banner (wired in `bridge.check_for_update()` → `app.js checkForUpdate()`, logic in [container_tracker/core/updates.py](container_tracker/core/updates.py)) polls `releases/latest` for `GITHUB_REPO` and shows a clickable banner when a release tag parses newer than `__version__` (`v` prefix stripped). **The repo/releases must be publicly reachable** — the check is unauthenticated.
 
 ## Architecture
 
@@ -108,6 +119,8 @@ The ShipsGo token must never be written to `config.json` or any plain-text file.
 live `SHIPSGO_API_KEY` (used by the CLI variant `container_tracker.py`) was found in a
 OneDrive-synced folder — unencrypted and cross-device-synced. It was relocated to
 `C:\Users\emine\.secrets\container-tracker\.env`. Treat the old key as **exposed**.
+(2026-06-11: owner confirmed rotation is deferred until the v1.2 development pass
+is finished — do not delete this section until the rotation is actually done.)
 
 Steps:
 1. Generate a new key in the ShipsGo dashboard and revoke the old one.

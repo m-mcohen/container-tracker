@@ -31,12 +31,16 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail "Version must be X.Y.Z (got '$V
 py -3.12 --version *> $null
 if ($LASTEXITCODE -ne 0) { Fail "Python 3.12 not found. Install: winget install Python.Python.3.12" }
 
-$iscc = Get-Command iscc -ErrorAction SilentlyContinue
-if (-not $iscc) {
-    $defaultIscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-    if (Test-Path $defaultIscc) { $iscc = $defaultIscc }
-    else { Fail "Inno Setup compiler (iscc) not found. Install: winget install JRSoftware.InnoSetup" }
-} else { $iscc = $iscc.Source }
+$isccCmd = Get-Command iscc -ErrorAction SilentlyContinue
+if ($isccCmd) { $iscc = $isccCmd.Source }
+else {
+    $iscc = @(
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+        "C:\Program Files\Inno Setup 6\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $iscc) { Fail "Inno Setup compiler (iscc) not found. Install: winget install JRSoftware.InnoSetup" }
+}
 
 if (-not $BuildOnly) {
     gh auth status *> $null
