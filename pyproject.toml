@@ -1,6 +1,6 @@
 [project]
 name = "container-tracker"
-version = "1.1.1"
+version = "1.2.0"
 description = "Track ocean shipping containers via ShipsGo API and sync to Excel."
 # 3.12 is the actual build target (see build.bat). 3.13 is allowed once we
 # choose to use it — pythonnet typically ships wheels for new Python minors
