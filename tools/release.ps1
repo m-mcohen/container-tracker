@@ -69,7 +69,11 @@ Set-Content $pyprojectPath $pyproject -Encoding utf8 -NoNewline
 Write-Host "[1/5] Version bumped to $Version (constants.py, pyproject.toml)" -ForegroundColor Green
 
 # ---- Tests ------------------------------------------------------------------
-python -m pytest -q
+# Run on the SAME interpreter the exe is built from (py -3.12), not whatever
+# "python" resolves to on PATH. Deps first so a fresh 3.12 install works.
+cmd /c "py -3.12 -m pip install -r requirements-build.txt pytest --quiet"
+if ($LASTEXITCODE -ne 0) { Fail "pip install for the build interpreter failed" }
+py -3.12 -m pytest -q
 if ($LASTEXITCODE -ne 0) { Fail "Tests failed - release aborted. Version files are bumped but uncommitted; revert with: git checkout -- $constantsPath $pyprojectPath" }
 Write-Host "[2/5] Tests passed" -ForegroundColor Green
 
