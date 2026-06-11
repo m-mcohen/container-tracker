@@ -1,7 +1,10 @@
 """Validation patterns and shipment-status field extraction from ShipsGo v2."""
 
+import logging
 import re
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 API_KEY_PATTERN = re.compile(r"^[0-9a-fA-F\-]{30,40}$")
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -65,8 +68,11 @@ def extract_fields(shipment: dict) -> dict:
                 f["delay_days"] = f"{diff} days (early)"
             else:
                 f["delay_days"] = "On time"
-    except Exception:
-        pass
+    except Exception as e:
+        # A malformed ETA from the API leaves delay_days empty rather than
+        # failing the whole extraction — but don't lose the evidence.
+        logger.warning("delay_days parse failed (eta=%r original_eta=%r): %s",
+                       f.get("eta"), f.get("original_eta"), e)
 
     containers = shipment.get("containers") or []
     if containers and isinstance(containers[0], dict):

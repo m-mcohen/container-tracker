@@ -26,18 +26,18 @@ def get_api_token() -> str:
     try:
         return keyring.get_password(KEYRING_SERVICE, KEYRING_USER) or ""
     except Exception as e:
-        logger.info(f"keyring read failed: {e}")
+        logger.warning(f"keyring read failed: {e}")
         return ""
 
 
 def set_api_token(token: str) -> None:
     if keyring is None:
-        logger.info("keyring not installed; token not persisted")
+        logger.warning("keyring not installed; token not persisted")
         return
     try:
         keyring.set_password(KEYRING_SERVICE, KEYRING_USER, token)
     except Exception as e:
-        logger.info(f"keyring write failed: {e}")
+        logger.warning(f"keyring write failed: {e}")
 
 
 def migrate_keyring() -> None:

@@ -61,18 +61,22 @@ Step 6's mutations will need to revisit.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import re
+import threading
 import time
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
 from container_tracker.core import config as ct_config
 from container_tracker.core import credentials as ct_credentials
 from container_tracker.core import status as ct_status
+from container_tracker.core import updates as ct_updates
 from container_tracker.core.api import ShipsGoClient, resolve_scac
-from container_tracker.core.constants import CARRIER_NAMES
+from container_tracker.core.constants import CARRIER_NAMES, GITHUB_REPO, __version__
 from container_tracker.core.excel import (
     append_container_row,
     create_template_excel,
@@ -82,6 +86,35 @@ from container_tracker.core.excel import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# pywebview dispatches js_api calls on worker threads, so two bridge methods
+# can interleave their load → modify → save round-trips on tracking_data.json
+# / config.json and silently lose one side's writes (e.g. archive during a
+# slow refresh). One process-wide lock serializes every mutating method.
+# Holding it across refresh_all's HTTP calls is deliberate: queued clicks
+# just resolve a few seconds later, which beats lost updates at this scale.
+_DB_LOCK = threading.RLock()
+
+
+def _locked(fn):
+    """Serialize a mutating bridge method on _DB_LOCK."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _DB_LOCK:
+            return fn(*args, **kwargs)
+    return wrapper
+
+
+def _safe_err(e: Exception) -> str:
+    """Compact, user-safe error text for dicts returned to JS.
+
+    requests exceptions can stringify with the full response body embedded
+    (which may echo headers or account details) — keep only the first line
+    and cap the length. Full tracebacks still go to the log, never the UI.
+    """
+    msg = (str(e) or e.__class__.__name__).splitlines()[0]
+    return msg[:197] + "..." if len(msg) > 200 else msg
 
 
 # Match the leading signed integer in delay strings like "+7 days",
@@ -188,6 +221,7 @@ class Bridge:
 
     # --- Refresh -----------------------------------------------------------
 
+    @_locked
     def refresh_all(self) -> dict:
         """Refresh every container in tracking_data.json + sync Excel.
 
@@ -256,17 +290,35 @@ class Bridge:
                     cn_up = (raw or "").strip().upper()
                     if cn_up:
                         excel_cn_set.add(cn_up)
-                # Diff: drop non-archived CNs that are no longer in Excel.
-                for cn in [c for c, r in list(db.items())
-                           if c.upper() not in excel_cn_set
-                           and not r.get("archived")]:
-                    del db[cn]
-                # Pick up CNs added directly in the workbook.
-                for cn_up in excel_cn_set:
-                    if cn_up in db or cn_up in dismissed:
-                        continue
-                    db[cn_up] = {"container_number": cn_up,
-                                 "last_refreshed": None}
+                # Mass-deletion guard: read_containers_from_excel returns []
+                # WITHOUT raising when it can't find a container column
+                # (renamed header, wrong file linked). Running the deletion
+                # diff on that empty set would silently wipe every
+                # non-archived container from the DB. An all-empty read
+                # against a non-empty DB is far more likely a broken read
+                # than the user deleting every row at once — surface it as
+                # a read failure and keep the DB intact.
+                has_live = any(not r.get("archived") for r in db.values())
+                if not excel_cn_set and has_live:
+                    logger.warning(
+                        "Excel read returned no containers while the DB has "
+                        "live entries — skipping the deletion diff "
+                        "(container column missing or renamed in %s?)",
+                        excel_path,
+                    )
+                    excel_read_failed = True
+                else:
+                    # Diff: drop non-archived CNs no longer in Excel.
+                    for cn in [c for c, r in list(db.items())
+                               if c.upper() not in excel_cn_set
+                               and not r.get("archived")]:
+                        del db[cn]
+                    # Pick up CNs added directly in the workbook.
+                    for cn_up in excel_cn_set:
+                        if cn_up in db or cn_up in dismissed:
+                            continue
+                        db[cn_up] = {"container_number": cn_up,
+                                     "last_refreshed": None}
             except Exception as e:
                 logger.warning("Excel read failed: %s", e)
                 excel_read_failed = True
@@ -287,7 +339,7 @@ class Bridge:
             return {
                 **base,
                 "duration_ms": int((time.monotonic() - started) * 1000),
-                "error": f"list_shipments failed: {e}",
+                "error": f"list_shipments failed: {_safe_err(e)}",
                 "excel_read_failed": excel_read_failed,
                 "excel_missing": excel_missing,
             }
@@ -325,7 +377,7 @@ class Bridge:
                 updated += 1
             except Exception as e:
                 logger.warning("refresh failed for %s: %s", cn_up, e)
-                failed.append({"cn": cn_up, "error": str(e)})
+                failed.append({"cn": cn_up, "error": _safe_err(e)})
 
         # Single tracking_data.json write at end (legacy line 820).
         ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
@@ -353,6 +405,7 @@ class Bridge:
             "excel_rows_updated": excel_rows_updated,
         }
 
+    @_locked
     def refresh_one(self, cn: str) -> dict:
         """Refresh a single container by container number.
 
@@ -389,7 +442,7 @@ class Bridge:
                         break
             except Exception as e:
                 return {"cn": cn_up, "ok": False,
-                        "error": f"list_shipments failed: {e}"}
+                        "error": f"list_shipments failed: {_safe_err(e)}"}
         if not sid:
             return {"cn": cn_up, "ok": False,
                     "error": "no shipment id (not on ShipsGo)"}
@@ -401,14 +454,16 @@ class Bridge:
             fields = ct_status.extract_fields(shipment)
             rec.update(fields)
             rec["shipment_id"] = sid
-            rec["last_refreshed"] = datetime.utcnow().isoformat() + "Z"
+            rec["last_refreshed"] = datetime.now(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ")
             ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
             return {"cn": cn_up, "ok": True, "error": None}
         except Exception as e:
-            return {"cn": cn_up, "ok": False, "error": str(e)}
+            return {"cn": cn_up, "ok": False, "error": _safe_err(e)}
 
     # --- Mutations ---------------------------------------------------------
 
+    @_locked
     def add_container(self, cn: str, carrier: str) -> dict:
         """Add a new container. Calls ShipsGoClient.create_shipment
         immediately (matches legacy container_tracker_gui.py:700-756) and
@@ -467,7 +522,7 @@ class Bridge:
             resp = client.create_shipment(container_number=cn_up,
                                           carrier_scac=scac)
         except Exception as e:
-            return {"ok": False, "error": str(e),
+            return {"ok": False, "error": _safe_err(e),
                     "was_existing": False, "container": None,
                     "excel_write_failed": False}
 
@@ -518,6 +573,7 @@ class Bridge:
             "excel_write_failed": excel_write_failed,
         }
 
+    @_locked
     def remove_container(self, cn: str) -> dict:
         """Local-only remove (matches legacy:
         container_tracker_gui.py:667-698 — no API delete call). Idempotent
@@ -529,6 +585,7 @@ class Bridge:
             ct_config.save_json(ct_config.TRACKING_DB_FILE, db)
         return {"ok": True, "error": None}
 
+    @_locked
     def archive_container(self, cn: str) -> dict:
         """Mark a CN as archived and remove its row from the linked
         workbook. Archived records stay in tracking_data.json so the
@@ -566,6 +623,7 @@ class Bridge:
                 "container": _to_row(cn_up, rec),
                 "excel_write_failed": excel_write_failed}
 
+    @_locked
     def restore_container(self, cn: str) -> dict:
         """Inverse of archive_container: clear the archived flag and
         re-append the row to the linked workbook with whatever tracking
@@ -610,19 +668,28 @@ class Bridge:
         cfg = ct_config.load_config()
         return {
             "company_name": cfg.get("company_name", ""),
+            "contact_email": cfg.get("contact_email", "") or "",
             "api_token_present": bool(ct_credentials.get_api_token()),
             "theme": "dark" if cfg.get("dark_mode") else "light",
             "excel_path": cfg.get("excel_path", "") or "",
+            "app_version": __version__,
+            "data_dir": str(ct_config.DATA_DIR),
+            "github_url": f"https://github.com/{GITHUB_REPO}",
         }
 
-    def save_settings(self, company_name: str, api_token=None) -> dict:
-        """Save company name to config.json. Save api_token to keyring iff
-        non-empty (None / empty / whitespace leaves the existing token
-        untouched — the new shell uses a masked placeholder for "token
-        already set" and treats blank as "don't touch")."""
+    @_locked
+    def save_settings(self, company_name: str, api_token=None,
+                      contact_email=None) -> dict:
+        """Save company name (and contact email, if given) to config.json.
+        Save api_token to keyring iff non-empty (None / empty / whitespace
+        leaves the existing token untouched — the new shell uses a masked
+        placeholder for "token already set" and treats blank as "don't
+        touch")."""
         try:
             cfg = ct_config.load_config()
             cfg["company_name"] = (company_name or "").strip()
+            if contact_email is not None:
+                cfg["contact_email"] = str(contact_email).strip()
             ct_config.save_config(cfg)
             if api_token:
                 tok = str(api_token).strip()
@@ -631,7 +698,50 @@ class Bridge:
             return {"ok": True, "error": None}
         except Exception as e:
             logger.exception("save_settings failed")
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": _safe_err(e)}
+
+    @_locked
+    def set_theme(self, dark: bool) -> dict:
+        """Persist the dark-mode preference so it survives restarts."""
+        try:
+            cfg = ct_config.load_config()
+            cfg["dark_mode"] = bool(dark)
+            ct_config.save_config(cfg)
+            return {"ok": True, "error": None}
+        except Exception as e:
+            logger.exception("set_theme failed")
+            return {"ok": False, "error": _safe_err(e)}
+
+    # --- Updates / external links ------------------------------------------
+
+    def check_for_update(self) -> dict:
+        """Synchronous release check; pywebview already calls bridge methods
+        on a worker thread, so blocking on the 5s HTTP timeout is fine.
+        Returns {"available": bool, "tag": str, "url": str}."""
+        return ct_updates.check_for_update()
+
+    def open_url(self, url: str) -> dict:
+        """Open a URL in the system default browser. Restricted to this
+        project's GitHub pages so JS can't be tricked into launching
+        arbitrary targets."""
+        u = (url or "").strip()
+        if not u.startswith(f"https://github.com/{GITHUB_REPO}"):
+            return {"ok": False, "error": "URL not allowed"}
+        try:
+            webbrowser.open(u)
+            return {"ok": True, "error": None}
+        except Exception as e:
+            logger.exception("open_url failed")
+            return {"ok": False, "error": _safe_err(e)}
+
+    def open_data_folder(self) -> dict:
+        """Open %APPDATA%\\ContainerTracker in Explorer (About panel link)."""
+        try:
+            os.startfile(str(ct_config.DATA_DIR))  # noqa: S606 — fixed local path
+            return {"ok": True, "error": None}
+        except Exception as e:
+            logger.exception("open_data_folder failed")
+            return {"ok": False, "error": _safe_err(e)}
 
     # --- Excel link management (Step 6.5) ---------------------------------
 
@@ -640,6 +750,7 @@ class Bridge:
         the JS-side register-unmatched modal stays in sync with add."""
         return list(CARRIER_NAMES)
 
+    @_locked
     def set_excel_path(self, path: str) -> dict:
         """Persist the linked-workbook path to config.json. Empty string
         clears the link. Validates that a non-empty path exists; missing
@@ -658,7 +769,7 @@ class Bridge:
             return {"ok": True, "error": None, "path": p}
         except Exception as e:
             logger.exception("set_excel_path failed")
-            return {"ok": False, "error": str(e), "path": path or ""}
+            return {"ok": False, "error": _safe_err(e), "path": path or ""}
 
     def create_excel_template(self, path: str) -> dict:
         """Generate a fresh Container_Tracking template at ``path`` and
@@ -680,7 +791,7 @@ class Bridge:
             return {"ok": True, "error": None, "path": p}
         except Exception as e:
             logger.exception("create_excel_template failed")
-            return {"ok": False, "error": str(e), "path": path or ""}
+            return {"ok": False, "error": _safe_err(e), "path": path or ""}
 
     def open_linked_excel(self) -> dict:
         """Open the currently-linked workbook in Excel. Returns ok=False
@@ -696,7 +807,7 @@ class Bridge:
             return {"ok": True, "error": None}
         except Exception as e:
             logger.warning("open_linked_excel failed: %s", e)
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": _safe_err(e)}
 
     def pick_excel_file(self) -> dict:
         """Show the native Open dialog and return the chosen path. The
@@ -718,7 +829,7 @@ class Bridge:
             return {"path": chosen, "error": None}
         except Exception as e:
             logger.warning("pick_excel_file failed: %s", e)
-            return {"path": None, "error": str(e)}
+            return {"path": None, "error": _safe_err(e)}
 
     def pick_excel_save_path(self) -> dict:
         """Show the native Save-As dialog for a new template."""
@@ -738,10 +849,11 @@ class Bridge:
             return {"path": chosen, "error": None}
         except Exception as e:
             logger.warning("pick_excel_save_path failed: %s", e)
-            return {"path": None, "error": str(e)}
+            return {"path": None, "error": _safe_err(e)}
 
     # --- Unmatched-CN flow (Step 6.5) -------------------------------------
 
+    @_locked
     def register_unmatched(self, items: list) -> dict:
         """Register a batch of Excel-discovered CNs with ShipsGo.
 
@@ -786,7 +898,7 @@ class Bridge:
                 resp = client.create_shipment(container_number=cn_up,
                                               carrier_scac=scac)
             except Exception as e:
-                failures.append({"cn": cn_up, "error": str(e)})
+                failures.append({"cn": cn_up, "error": _safe_err(e)})
                 continue
             if isinstance(resp, dict) and resp.get("error") == "NOT_ENOUGH_CREDITS":
                 failures.append({"cn": cn_up, "error": "NOT_ENOUGH_CREDITS"})
@@ -808,6 +920,7 @@ class Bridge:
         return {"registered": registered, "failed": failures,
                 "credits_used": registered}
 
+    @_locked
     def dismiss_unmatched(self, cns: list) -> dict:
         """Add a batch of CNs to ``cfg["dismissed"]`` so future refreshes
         don't re-prompt for them. Idempotent."""
@@ -825,4 +938,4 @@ class Bridge:
             return {"ok": True, "dismissed": existing}
         except Exception as e:
             logger.exception("dismiss_unmatched failed")
-            return {"ok": False, "dismissed": [], "error": str(e)}
+            return {"ok": False, "dismissed": [], "error": _safe_err(e)}

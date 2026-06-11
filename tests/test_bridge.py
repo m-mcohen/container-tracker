@@ -126,12 +126,17 @@ def test_get_settings_reads_config(isolated_data_dir, mock_keyring):
     mock_keyring.store[(credentials.KEYRING_SERVICE,
                         credentials.KEYRING_USER)] = "real-token"
 
-    assert Bridge().get_settings() == {
-        "company_name": "ACME",
-        "api_token_present": True,
-        "theme": "light",
-        "excel_path": "",
-    }
+    s = Bridge().get_settings()
+    assert s["company_name"] == "ACME"
+    assert s["contact_email"] == ""
+    assert s["api_token_present"] is True
+    assert s["theme"] == "light"
+    assert s["excel_path"] == ""
+    # About-panel fields: live version string plus stable local paths/URLs.
+    from container_tracker.core.constants import GITHUB_REPO, __version__
+    assert s["app_version"] == __version__
+    assert s["data_dir"]  # non-empty path
+    assert s["github_url"] == f"https://github.com/{GITHUB_REPO}"
 
 
 def test_get_settings_no_token(isolated_data_dir, mock_keyring):
@@ -680,6 +685,34 @@ def test_refresh_all_excel_path_missing_file(
     # API fetch still ran and the JSON DB was still saved.
     assert factory.captured["instance"].list_calls == 1
     assert save_spy["tracking_writes"] == 1
+
+
+def test_refresh_all_empty_excel_read_does_not_mass_delete(
+        isolated_data_dir, monkeypatch, patched_token, sample_tracking_db):
+    """read_containers_from_excel returns [] WITHOUT raising when the
+    container column header is missing (renamed header / wrong file).
+    The deletion diff must not run against that empty set — it would
+    wipe every non-archived container. Guard: flag excel_read_failed,
+    keep the DB intact."""
+    sample_tracking_db()
+    db_before = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert db_before  # sanity: there are live containers to protect
+    _link_workbook("C:/some/file.xlsx")
+    monkeypatch.setattr(ct_bridge.Path, "exists", lambda self: True)
+    # No-column case: empty list, no exception.
+    monkeypatch.setattr(ct_bridge, "read_containers_from_excel",
+                        lambda p: [])
+    monkeypatch.setattr(ct_bridge, "update_excel_with_tracking",
+                        lambda p, db: 0)
+    factory = _FakeShipsGoClient.factory(listing=[], get_results={})
+    monkeypatch.setattr(ct_bridge, "ShipsGoClient", factory)
+
+    result = Bridge().refresh_all()
+
+    assert result["excel_read_failed"] is True
+    persisted = json.loads(ct_config.TRACKING_DB_FILE.read_text())
+    assert set(persisted) == set(db_before), (
+        "containers were deleted on an empty Excel read")
 
 
 def test_refresh_all_excel_locked_on_read(

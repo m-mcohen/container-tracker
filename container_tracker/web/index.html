@@ -62,6 +62,17 @@
             <a href="#" class="banner-link">Download update →</a>
             <button class="dismiss" title="Dismiss" aria-label="Dismiss update notice">×</button>
           </div>
+          <!-- First-run callout — hidden until loadSettings() finds no API key present. -->
+          <div class="notice" id="notice-first-run" hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <div class="notice-body">
+              <strong class="notice-title">Welcome to Container Tracker</strong>
+              <span class="notice-detail">Add your ShipsGo API key in Settings to start tracking containers.</span>
+            </div>
+            <div class="notice-actions">
+              <button class="btn btn-sm btn-primary" data-view="settings">Open Settings</button>
+            </div>
+          </div>
           <!-- Unmatched-containers notice — hidden until refresh_all() returns containers in Excel that aren't on ShipsGo. JS fills in the count and credit cost. -->
           <div class="notice" id="notice-unmatched" hidden>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
@@ -95,22 +106,6 @@
             <div class="notice-actions">
               <button class="btn btn-sm" id="notice-excel-dismiss">Dismiss</button>
             </div>
-          </div>
-        </div>
-
-        <!-- Linked spreadsheet card — deferred until Excel-link wiring step.
-             Hidden via the [hidden] attribute; will be unhidden when the
-             bridge method, file picker, and persistence are in place. -->
-        <div class="spreadsheet-card" hidden>
-          <div class="xls-icon">XLSX</div>
-          <div class="meta">
-            <div class="label">Linked spreadsheet</div>
-            <div class="path" title="C:\Users\michael\Documents\Container_Tracking.xlsx">C:\Users\michael\Documents\Container_Tracking.xlsx</div>
-          </div>
-          <div class="actions">
-            <button class="btn btn-sm">Browse…</button>
-            <button class="btn btn-sm">Create template</button>
-            <button class="btn btn-sm btn-primary">Open in Excel</button>
           </div>
         </div>
 
@@ -179,6 +174,13 @@
             </thead>
             <tbody id="shipments-tbody"></tbody>
           </table>
+          <div class="empty-state" id="empty-state" hidden>
+            <span class="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M5 11h2M9 11h2M13 11h2M17 11h2M5 15h2M9 15h2M13 15h2M17 15h2"/></svg>
+            </span>
+            <div class="empty-state-title" id="empty-state-title">No containers yet</div>
+            <div class="empty-state-sub" id="empty-state-sub">Add a container or link your Excel file to start tracking.</div>
+          </div>
           <div class="table-footer">
             <span>Showing <strong id="row-count">0</strong> of <strong id="row-total">0</strong> containers</span>
           </div>
@@ -193,14 +195,6 @@
             <span class="muted" style="font-size:11px">Last 50 events</span>
           </button>
           <div class="activity-body" id="activity-body">
-<div><span class="ts">[3:12 PM]</span> <span class="ok">Refreshed 10 containers — 3:12 PM EST</span></div>
-<div><span class="ts">[3:12 PM]</span> Updated 10 rows in Excel</div>
-<div><span class="ts">[3:12 PM]</span> --- DONE: 10 matched, 0 unmatched, 2 actively delayed, 10 Excel rows updated ---</div>
-<div><span class="ts">[3:12 PM]</span> &nbsp;&nbsp;EGLV5555666: SAILING | ETA: 2026-04-22 | Kaohsiung -> Los Angeles | DELAYED +7 days</div>
-<div><span class="ts">[3:12 PM]</span> &nbsp;&nbsp;MSKU1234567: SAILING | ETA: 2026-05-05 | Shanghai -> Los Angeles | DELAYED +4 days</div>
-<div><span class="ts">[3:12 PM]</span> Read 10 containers from Excel</div>
-<div><span class="ts">[3:12 PM]</span> Found 10 shipments on ShipsGo</div>
-<div><span class="ts">[3:12 PM]</span> Refreshing...</div>
           </div>
         </div>
 
@@ -251,7 +245,7 @@
                 </div>
                 <div class="field">
                   <label>Contact email</label>
-                  <input type="email" value="ops@acmelogistics.com" />
+                  <input type="email" id="settings-email" value="" />
                 </div>
               </div>
             </div>
@@ -314,10 +308,9 @@
             <h3>About</h3>
             <div class="panel-body">
               <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 18px;font-size:12px;">
-                <span class="muted">Version</span><span>Container Tracker v1.1.1 — up to date</span>
-                <span class="muted">Data folder</span><span><a href="#">%APPDATA%\ContainerTracker</a></span>
-                <span class="muted">Source</span><span><a href="#">github.com/m-mcohen/container-tracker</a></span>
-                <span class="muted">Support</span><span>michael@example.com</span>
+                <span class="muted">Version</span><span id="about-version"></span>
+                <span class="muted">Data folder</span><span><a href="#" id="about-data-folder">%APPDATA%\ContainerTracker</a></span>
+                <span class="muted">Source</span><span><a href="#" id="about-github">github.com/m-mcohen/container-tracker</a></span>
                 <span class="muted">Powered by</span><span>ShipsGo API</span>
               </div>
             </div>
@@ -379,7 +372,7 @@
       <div class="modal-body">
         <div class="field">
           <label for="f-cn">Container number</label>
-          <input id="f-cn" type="text" value="MSKU1234567" />
+          <input id="f-cn" type="text" placeholder="MSKU1234567" />
           <div class="hint">11 characters: 4-letter SCAC + 7 digits, e.g. <span style="font-family:var(--font-mono)">MSKU1234567</span></div>
         </div>
         <div class="field">
